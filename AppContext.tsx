@@ -63,6 +63,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       startTime: 'Agora',
       duration: '2s (mock)',
       cost: 0.00,
+      steps: [],
       logs: [
         { id: 'l1', agentName: orchestrator.name, agentAvatar: orchestrator.avatar, timestamp: new Date().toISOString(), level: 'info', message: 'Iniciando orquestração dinâmica.', phase: 'PLANNING' },
         { id: 'l2', agentName: orchestrator.name, agentAvatar: orchestrator.avatar, timestamp: new Date().toISOString(), level: 'success', message: 'Execução mock finalizada.', phase: 'OUTPUT', artifact: { type: 'text', label: 'Resultado', content: 'Orquestração concluída com sucesso (Simulação).' } }

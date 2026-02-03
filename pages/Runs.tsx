@@ -76,10 +76,12 @@ const RunCard: React.FC<{ run: Run }> = ({ run }) => {
 
       {expanded && (
         <div className="border-t border-neutral-800 p-4">
-          {run.finalResult && (
+          {(run.finalResult || run.consolidatedOutput) && (
             <div className="mb-4 p-3 rounded bg-green-500/5 border border-green-500/20">
               <p className="text-xs text-green-500 mb-1">Resultado</p>
-              <p className="text-sm text-neutral-300">{run.finalResult}</p>
+              <p className="text-sm text-neutral-300">
+                {run.consolidatedOutput || (typeof run.finalResult === 'string' ? run.finalResult : JSON.stringify(run.finalResult))}
+              </p>
             </div>
           )}
           <div className="space-y-1 divide-y divide-neutral-800/50">

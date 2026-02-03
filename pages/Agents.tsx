@@ -221,7 +221,9 @@ export const AgentEditor: React.FC = () => {
       maxSteps: 10,
       planningStrategy: 'dynamic',
       evaluationMode: 'basic',
-      consolidationStrategy: 'summarize'
+      consolidationStrategy: 'summarize',
+      allowReplanning: true,
+      maxRetries: 2,
     },
     status: 'draft',
     tags: [],
