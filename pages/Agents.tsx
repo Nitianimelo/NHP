@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../AppContext';
 import { Agent, AgentType, SchemaField } from '../types';
+import { ModelSelector } from '../components/ModelSelector';
 import {
   Plus,
   Search,
   ArrowLeft,
   Save,
   Trash2,
-  ChevronDown,
   X
 } from 'lucide-react';
 
@@ -322,34 +322,35 @@ export const AgentEditor: React.FC = () => {
         </div>
 
         {/* Modelo */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Modelo</label>
-            <select
-              value={formData.model || ''}
-              onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-              className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-neutral-700"
-            >
-              <option value="gpt-4o">GPT-4o (OpenAI)</option>
-              <option value="gpt-4-turbo">GPT-4 Turbo (OpenAI)</option>
-              <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Anthropic)</option>
-              <option value="claude-3-opus">Claude 3 Opus (Anthropic)</option>
-              <option value="gemini-1.5-pro">Gemini 1.5 Pro (Google)</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Temperature: {formData.temperature}
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.1"
-              value={formData.temperature || 0.7}
-              onChange={(e) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
-              className="w-full mt-2"
-            />
+        <div>
+          <label className="block text-sm font-medium mb-2">Modelo</label>
+          <ModelSelector
+            value={formData.model || ''}
+            onChange={(modelId) => setFormData({ ...formData, model: modelId })}
+            placeholder="Buscar e selecionar modelo..."
+          />
+          <p className="text-xs text-neutral-500 mt-1">
+            Todos os modelos disponíveis via OpenRouter. Configure sua API Key na página de API.
+          </p>
+        </div>
+
+        {/* Temperature */}
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            Temperature: {formData.temperature}
+          </label>
+          <input
+            type="range"
+            min="0"
+            max="2"
+            step="0.1"
+            value={formData.temperature || 0.7}
+            onChange={(e) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
+            className="w-full"
+          />
+          <div className="flex justify-between text-xs text-neutral-500 mt-1">
+            <span>Preciso</span>
+            <span>Criativo</span>
           </div>
         </div>
 
