@@ -4,8 +4,8 @@ import { LayoutDashboard, Bot, Play, Database, Settings, Key, MessageCircle } fr
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/agents', icon: Bot, label: 'Agentes' },
   { to: '/chat', icon: MessageCircle, label: 'Chat' },
+  { to: '/agents', icon: Bot, label: 'Agentes' },
   { to: '/runs', icon: Play, label: 'Execuções' },
   { to: '/knowledge', icon: Database, label: 'Knowledge' },
   { to: '/api', icon: Key, label: 'API' },

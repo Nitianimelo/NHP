@@ -9,7 +9,6 @@ import {
   ArrowLeft,
   Save,
   Trash2,
-  ChevronDown,
   X
 } from 'lucide-react';
 
@@ -231,6 +230,7 @@ export const AgentEditor: React.FC = () => {
   });
   const [models, setModels] = useState<OpenRouterModel[]>([]);
   const [modelsStatus, setModelsStatus] = useState<'idle' | 'loading' | 'error' | 'success'>('idle');
+  const [modelSearch, setModelSearch] = useState('');
 
   useEffect(() => {
     const loadModels = async () => {
@@ -254,22 +254,16 @@ export const AgentEditor: React.FC = () => {
     loadModels();
   }, [apiConfig]);
 
-  const modelOptions = useMemo(() => {
-    if (models.length > 0) {
-      return models.map(model => ({
-        value: model.id,
-        label: model.name,
-      }));
-    }
+  const filteredModels = useMemo(() => {
+    if (!modelSearch.trim()) return models;
+    const search = modelSearch.toLowerCase();
+    return models.filter(m =>
+      m.id.toLowerCase().includes(search) ||
+      m.name.toLowerCase().includes(search)
+    );
+  }, [models, modelSearch]);
 
-    return [
-      { value: 'gpt-4o', label: 'GPT-4o (OpenAI)' },
-      { value: 'gpt-4-turbo', label: 'GPT-4 Turbo (OpenAI)' },
-      { value: 'claude-3-5-sonnet', label: 'Claude 3.5 Sonnet (Anthropic)' },
-      { value: 'claude-3-opus', label: 'Claude 3 Opus (Anthropic)' },
-      { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (Google)' },
-    ];
-  }, [models]);
+  const selectedModel = models.find(m => m.id === formData.model);
 
   const handleSave = () => {
     if (isNew) {
@@ -363,46 +357,77 @@ export const AgentEditor: React.FC = () => {
           />
         </div>
 
-        {/* Modelo */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Modelo</label>
-            <select
-              value={formData.model || ''}
-              onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-              className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-neutral-700"
-            >
-              {modelsStatus === 'loading' && (
-                <option value="" disabled>Carregando modelos...</option>
+        {/* Modelo com busca */}
+        <div>
+          <label className="block text-sm font-medium mb-2">Modelo</label>
+          {modelsStatus === 'loading' ? (
+            <div className="bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm text-neutral-500">
+              Carregando modelos do OpenRouter...
+            </div>
+          ) : models.length > 0 ? (
+            <div className="space-y-2">
+              <input
+                type="text"
+                placeholder="Buscar modelo..."
+                value={modelSearch}
+                onChange={(e) => setModelSearch(e.target.value)}
+                className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-neutral-700"
+              />
+              <select
+                value={formData.model || ''}
+                onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-neutral-700"
+                size={6}
+              >
+                {filteredModels.map(model => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} ({model.id})
+                  </option>
+                ))}
+              </select>
+              {selectedModel && (
+                <p className="text-xs text-neutral-500">
+                  Selecionado: {selectedModel.name} - {selectedModel.context_length.toLocaleString()} tokens
+                </p>
               )}
-              {modelsStatus === 'error' && models.length === 0 && (
-                <option value="" disabled>Falha ao carregar modelos</option>
-              )}
-              {modelOptions.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            {models.length > 0 && (
-              <p className="text-xs text-neutral-500 mt-2">
-                Lista carregada do OpenRouter.
+            </div>
+          ) : (
+            <div>
+              <select
+                value={formData.model || ''}
+                onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-neutral-700"
+              >
+                <option value="gpt-4o">GPT-4o (OpenAI)</option>
+                <option value="gpt-4-turbo">GPT-4 Turbo (OpenAI)</option>
+                <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Anthropic)</option>
+                <option value="claude-3-opus">Claude 3 Opus (Anthropic)</option>
+                <option value="gemini-1.5-pro">Gemini 1.5 Pro (Google)</option>
+              </select>
+              <p className="text-xs text-neutral-500 mt-1">
+                Configure a API Key do OpenRouter para ver todos os modelos.
               </p>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Temperature: {formData.temperature}
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.1"
-              value={formData.temperature || 0.7}
-              onChange={(e) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
-              className="w-full mt-2"
-            />
+            </div>
+          )}
+        </div>
+
+        {/* Temperature */}
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            Temperature: {formData.temperature}
+          </label>
+          <input
+            type="range"
+            min="0"
+            max="2"
+            step="0.1"
+            value={formData.temperature || 0.7}
+            onChange={(e) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
+            className="w-full"
+          />
+          <div className="flex justify-between text-xs text-neutral-500 mt-1">
+            <span>Preciso</span>
+            <span>Criativo</span>
           </div>
         </div>
 

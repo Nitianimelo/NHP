@@ -197,7 +197,11 @@ export const Chat: React.FC = () => {
                   <p className="text-xs uppercase text-neutral-500 mb-1">
                     {message.role === 'user' ? 'Você' : 'Orquestrador'}
                   </p>
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  <p className="whitespace-pre-wrap">
+                    {typeof message.content === 'string'
+                      ? message.content
+                      : JSON.stringify(message.content)}
+                  </p>
                 </div>
               </div>
             ))}
