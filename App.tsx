@@ -8,6 +8,7 @@ import { AgentsList, AgentEditor } from './pages/Agents';
 import { Runs } from './pages/Runs';
 import { Knowledge } from './pages/Knowledge';
 import { Api } from './pages/Api';
+import { Chat } from './pages/Chat';
 
 const SettingsPlaceholder = () => <div className="text-white">Página de Configurações (Mock)</div>;
 
@@ -19,16 +20,18 @@ const App = () => {
           <Routes>
             <Route path="/welcome" element={<Welcome />} />
             <Route path="/" element={<Dashboard />} />
-            
+
+            <Route path="/chat" element={<Chat />} />
+
             <Route path="/agents" element={<AgentsList />} />
             <Route path="/agents/new" element={<AgentEditor />} />
             <Route path="/agents/:id" element={<AgentEditor />} />
-            
+
             <Route path="/runs" element={<Runs />} />
             <Route path="/knowledge" element={<Knowledge />} />
             <Route path="/api" element={<Api />} />
             <Route path="/settings" element={<SettingsPlaceholder />} />
-            
+
             <Route path="*" element={<Navigate to="/welcome" replace />} />
           </Routes>
         </Layout>

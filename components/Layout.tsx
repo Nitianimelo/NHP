@@ -1,9 +1,10 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Bot, Play, Database, Settings, Key } from 'lucide-react';
+import { LayoutDashboard, Bot, Play, Database, Settings, Key, MessageSquare } from 'lucide-react';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/chat', icon: MessageSquare, label: 'Chat' },
   { to: '/agents', icon: Bot, label: 'Agentes' },
   { to: '/runs', icon: Play, label: 'Execuções' },
   { to: '/knowledge', icon: Database, label: 'Knowledge' },
