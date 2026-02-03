@@ -17,10 +17,20 @@ interface AppContextType {
   addAgent: (agent: Agent) => void;
   updateAgent: (id: string, data: Partial<Agent>) => void;
   createRun: (orchestratorId: string, goal: string) => void;
+  addRun: (run: Run) => void;
+  updateRun: (id: string, data: Partial<Run>) => void;
   setApiConfig: (config: Partial<ApiConfig>) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+const loadAgents = (): Agent[] => {
+  try {
+    const stored = localStorage.getItem('nhp_agents');
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return MOCK_AGENTS;
+};
 
 const loadApiConfig = (): ApiConfig => {
   try {
@@ -31,7 +41,7 @@ const loadApiConfig = (): ApiConfig => {
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [agents, setAgents] = useState<Agent[]>(MOCK_AGENTS);
+  const [agents, setAgents] = useState<Agent[]>(loadAgents);
   const [runs, setRuns] = useState<Run[]>(MOCK_RUNS);
   const [kbs, setKbs] = useState<KnowledgeBase[]>(MOCK_KBS);
   const [workflows, setWorkflows] = useState<Workflow[]>(MOCK_WORKFLOWS);
@@ -48,6 +58,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addAgent = (agent: Agent) => setAgents(prev => [agent, ...prev]);
   const updateAgent = (id: string, data: Partial<Agent>) => {
     setAgents(prev => prev.map(a => a.id === id ? { ...a, ...data } : a));
+  };
+  const addRun = (run: Run) => setRuns(prev => [run, ...prev]);
+  const updateRun = (id: string, data: Partial<Run>) => {
+    setRuns(prev => prev.map(run => run.id === id ? { ...run, ...data } : run));
   };
 
   const createRun = (orchestratorId: string, goal: string) => {
@@ -71,10 +85,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRuns(prev => [newRun, ...prev]);
   };
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('nhp_agents', JSON.stringify(agents));
+    } catch {}
+  }, [agents]);
+
   return (
     <AppContext.Provider value={{
       agents, runs, kbs, workflows, apiConfig,
-      addAgent, updateAgent, createRun, setApiConfig
+      addAgent, updateAgent, createRun, addRun, updateRun, setApiConfig
     }}>
       {children}
     </AppContext.Provider>

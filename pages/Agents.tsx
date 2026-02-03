@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../AppContext';
 import { Agent, AgentType, SchemaField } from '../types';
+import { createOpenRouterClient, OpenRouterModel } from '../lib/openrouter';
 import {
   Plus,
   Search,
@@ -196,7 +197,7 @@ const SchemaFieldEditor: React.FC<{
 export const AgentEditor: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { agents, kbs, addAgent, updateAgent } = useApp();
+  const { agents, kbs, addAgent, updateAgent, apiConfig } = useApp();
 
   const existingAgent = id ? agents.find(a => a.id === id) : null;
   const isNew = !existingAgent;
@@ -226,6 +227,47 @@ export const AgentEditor: React.FC = () => {
     status: 'draft',
     tags: [],
   });
+  const [models, setModels] = useState<OpenRouterModel[]>([]);
+  const [modelsStatus, setModelsStatus] = useState<'idle' | 'loading' | 'error' | 'success'>('idle');
+
+  useEffect(() => {
+    const loadModels = async () => {
+      const client = createOpenRouterClient(apiConfig);
+      if (!client) {
+        setModels([]);
+        setModelsStatus('idle');
+        return;
+      }
+      setModelsStatus('loading');
+      try {
+        const data = await client.getModels();
+        setModels(data);
+        setModelsStatus('success');
+      } catch {
+        setModels([]);
+        setModelsStatus('error');
+      }
+    };
+
+    loadModels();
+  }, [apiConfig]);
+
+  const modelOptions = useMemo(() => {
+    if (models.length > 0) {
+      return models.map(model => ({
+        value: model.id,
+        label: model.name,
+      }));
+    }
+
+    return [
+      { value: 'gpt-4o', label: 'GPT-4o (OpenAI)' },
+      { value: 'gpt-4-turbo', label: 'GPT-4 Turbo (OpenAI)' },
+      { value: 'claude-3-5-sonnet', label: 'Claude 3.5 Sonnet (Anthropic)' },
+      { value: 'claude-3-opus', label: 'Claude 3 Opus (Anthropic)' },
+      { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (Google)' },
+    ];
+  }, [models]);
 
   const handleSave = () => {
     if (isNew) {
@@ -328,12 +370,23 @@ export const AgentEditor: React.FC = () => {
               onChange={(e) => setFormData({ ...formData, model: e.target.value })}
               className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-neutral-700"
             >
-              <option value="gpt-4o">GPT-4o (OpenAI)</option>
-              <option value="gpt-4-turbo">GPT-4 Turbo (OpenAI)</option>
-              <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Anthropic)</option>
-              <option value="claude-3-opus">Claude 3 Opus (Anthropic)</option>
-              <option value="gemini-1.5-pro">Gemini 1.5 Pro (Google)</option>
+              {modelsStatus === 'loading' && (
+                <option value="" disabled>Carregando modelos...</option>
+              )}
+              {modelsStatus === 'error' && models.length === 0 && (
+                <option value="" disabled>Falha ao carregar modelos</option>
+              )}
+              {modelOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
+            {models.length > 0 && (
+              <p className="text-xs text-neutral-500 mt-2">
+                Lista carregada do OpenRouter.
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium mb-2">
