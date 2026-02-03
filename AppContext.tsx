@@ -22,6 +22,14 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+const loadAgents = (): Agent[] => {
+  try {
+    const stored = localStorage.getItem('nhp_agents');
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return MOCK_AGENTS;
+};
+
 const loadApiConfig = (): ApiConfig => {
   try {
     const stored = localStorage.getItem('nhp_api_config');
@@ -31,7 +39,7 @@ const loadApiConfig = (): ApiConfig => {
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [agents, setAgents] = useState<Agent[]>(MOCK_AGENTS);
+  const [agents, setAgents] = useState<Agent[]>(loadAgents);
   const [runs, setRuns] = useState<Run[]>(MOCK_RUNS);
   const [kbs, setKbs] = useState<KnowledgeBase[]>(MOCK_KBS);
   const [workflows, setWorkflows] = useState<Workflow[]>(MOCK_WORKFLOWS);
@@ -70,6 +78,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setRuns(prev => [newRun, ...prev]);
   };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('nhp_agents', JSON.stringify(agents));
+    } catch {}
+  }, [agents]);
 
   return (
     <AppContext.Provider value={{

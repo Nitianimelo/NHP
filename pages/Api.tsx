@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../AppContext';
 import { Eye, EyeOff, ExternalLink, CheckCircle, XCircle, Loader } from 'lucide-react';
+import { createOpenRouterClient, OpenRouterModel } from '../lib/openrouter';
 
 export const Api: React.FC = () => {
   const { apiConfig, setApiConfig } = useApp();
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
+  const [models, setModels] = useState<OpenRouterModel[]>([]);
+  const [modelsStatus, setModelsStatus] = useState<'idle' | 'loading' | 'error' | 'success'>('idle');
+  const [modelsError, setModelsError] = useState<string | null>(null);
 
   const testConnection = async () => {
     if (!apiConfig.openRouterKey) return;
@@ -32,6 +36,32 @@ export const Api: React.FC = () => {
       setTesting(false);
     }
   };
+
+  useEffect(() => {
+    const loadModels = async () => {
+      const client = createOpenRouterClient(apiConfig);
+      if (!client) {
+        setModels([]);
+        setModelsStatus('idle');
+        return;
+      }
+      setModelsStatus('loading');
+      setModelsError(null);
+      try {
+        const data = await client.getModels();
+        setModels(data);
+        setModelsStatus('success');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Erro ao buscar modelos.';
+        setModelsError(message);
+        setModelsStatus('error');
+      }
+    };
+
+    loadModels();
+  }, [apiConfig]);
+
+  const topModels = useMemo(() => models.slice(0, 12), [models]);
 
   const maskedKey = apiConfig.openRouterKey
     ? `${apiConfig.openRouterKey.slice(0, 8)}${'•'.repeat(24)}${apiConfig.openRouterKey.slice(-4)}`
@@ -125,6 +155,44 @@ export const Api: React.FC = () => {
             <br />
             A chave é armazenada localmente no seu navegador.
           </p>
+        </div>
+
+        {/* Models */}
+        <div className="p-4 bg-neutral-900 rounded text-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-neutral-300 font-medium">Modelos disponíveis</p>
+            {modelsStatus === 'loading' && (
+              <span className="text-xs text-neutral-500 flex items-center gap-2">
+                <Loader size={12} className="animate-spin" />
+                Carregando
+              </span>
+            )}
+          </div>
+
+          {modelsStatus === 'error' && (
+            <p className="text-xs text-red-400">{modelsError}</p>
+          )}
+
+          {modelsStatus === 'success' && models.length === 0 && (
+            <p className="text-xs text-neutral-500">Nenhum modelo retornado.</p>
+          )}
+
+          {modelsStatus === 'success' && models.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-neutral-400">
+              {topModels.map(model => (
+                <div key={model.id} className="border border-neutral-800 rounded px-2 py-1">
+                  <p className="text-neutral-200">{model.name}</p>
+                  <p className="text-neutral-500">{model.id}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {modelsStatus === 'success' && models.length > 12 && (
+            <p className="text-xs text-neutral-500">
+              Exibindo {topModels.length} de {models.length} modelos.
+            </p>
+          )}
         </div>
 
         {/* Status */}
