@@ -1,222 +1,213 @@
 import React, { useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../AppContext';
-import { Agent, AgentType } from '../types';
+import { Agent, AgentType, SchemaField } from '../types';
 import {
-  Bot,
   Plus,
   Search,
-  Filter,
-  ChevronRight,
-  Cpu,
-  Users,
-  Sparkles,
   ArrowLeft,
   Save,
   Trash2,
-  Settings,
-  Brain,
-  Database,
-  Code,
-  Layers,
-  Zap,
-  GitBranch,
-  MoreVertical
+  ChevronDown,
+  X
 } from 'lucide-react';
 
-// Agent Card Component
+// Agent Card
 const AgentCard: React.FC<{ agent: Agent }> = ({ agent }) => {
-  const typeColors = {
-    orchestrator: 'cyber-cyan',
-    specialist: 'cyber-purple'
-  };
-
-  const color = typeColors[agent.type];
-
   return (
     <Link
       to={`/agents/${agent.id}`}
-      className="glass rounded-2xl p-5 card-hover group block"
+      className="block p-4 rounded-lg border border-neutral-800 hover:border-neutral-700 transition-colors"
     >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className={`w-12 h-12 rounded-xl bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center text-2xl border border-zinc-700/50`}>
-            {agent.avatar}
-          </div>
-          <div>
-            <h3 className="font-semibold group-hover:text-cyber-cyan transition-colors">
-              {agent.name}
-            </h3>
-            <p className="text-xs text-zinc-500">{agent.role}</p>
-          </div>
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <h3 className="font-medium text-white">{agent.name}</h3>
+          <p className="text-xs text-neutral-500">{agent.role}</p>
         </div>
-        <div className={`w-2 h-2 rounded-full mt-2 ${
-          agent.status === 'active' ? 'bg-cyber-green status-dot' :
-          agent.status === 'draft' ? 'bg-yellow-500' : 'bg-zinc-600'
-        }`}></div>
+        <span className={`text-xs px-2 py-0.5 rounded ${
+          agent.type === 'orchestrator'
+            ? 'bg-neutral-800 text-neutral-300'
+            : 'bg-neutral-800/50 text-neutral-400'
+        }`}>
+          {agent.type === 'orchestrator' ? 'Orquestrador' : 'Especialista'}
+        </span>
       </div>
 
-      {/* Description */}
-      <p className="text-sm text-zinc-400 mb-4 line-clamp-2">
+      <p className="text-sm text-neutral-400 mb-3 line-clamp-2">
         {agent.description}
       </p>
 
-      {/* Tags */}
-      <div className="flex items-center gap-2 mb-4">
-        <span className={`tag px-2 py-1 rounded-md bg-${color}/10 text-${color}`}>
-          {agent.type === 'orchestrator' ? 'Orquestrador' : 'Especialista'}
-        </span>
-        {agent.tags.map(tag => (
-          <span key={tag} className="tag px-2 py-1 rounded-md bg-zinc-800 text-zinc-400">
-            {tag}
-          </span>
-        ))}
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between pt-4 border-t border-zinc-800/50">
-        <div className="flex items-center gap-2 text-xs text-zinc-500">
-          <Cpu className="w-3 h-3" />
-          <span className="font-mono">{agent.model}</span>
-        </div>
-        <span className="text-xs text-zinc-600">{agent.lastUpdated}</span>
+      <div className="flex items-center justify-between text-xs text-neutral-500">
+        <span className="font-mono">{agent.model}</span>
+        <span>{agent.status}</span>
       </div>
     </Link>
   );
 };
 
-// Agents List Page
+// Agents List
 export const AgentsList: React.FC = () => {
   const { agents } = useApp();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | AgentType>('all');
 
   const filteredAgents = agents.filter(agent => {
-    const matchesSearch = agent.name.toLowerCase().includes(search.toLowerCase()) ||
-      agent.description.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = agent.name.toLowerCase().includes(search.toLowerCase());
     const matchesFilter = filter === 'all' || agent.type === filter;
     return matchesSearch && matchesFilter;
   });
 
-  const orchestrators = agents.filter(a => a.type === 'orchestrator').length;
-  const specialists = agents.filter(a => a.type === 'specialist').length;
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">Agentes</h1>
-          <p className="text-zinc-500">Gerencie sua equipe de agentes inteligentes</p>
-        </div>
+    <div className="max-w-4xl">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold">Agentes</h1>
         <Link
           to="/agents/new"
-          className="btn-primary px-5 py-2.5 rounded-xl font-semibold text-sm text-zinc-900 flex items-center gap-2"
+          className="flex items-center gap-2 px-3 py-2 bg-white text-black text-sm font-medium rounded hover:bg-neutral-200 transition-colors"
         >
-          <Plus className="w-4 h-4" />
+          <Plus size={16} />
           Novo Agente
         </Link>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="glass rounded-xl p-4 flex items-center gap-4">
-          <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center">
-            <Users className="w-5 h-5 text-zinc-400" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold">{agents.length}</p>
-            <p className="text-xs text-zinc-500">Total de Agentes</p>
-          </div>
-        </div>
-        <div className="glass rounded-xl p-4 flex items-center gap-4">
-          <div className="w-10 h-10 rounded-lg bg-cyber-cyan/10 flex items-center justify-center">
-            <GitBranch className="w-5 h-5 text-cyber-cyan" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold">{orchestrators}</p>
-            <p className="text-xs text-zinc-500">Orquestradores</p>
-          </div>
-        </div>
-        <div className="glass rounded-xl p-4 flex items-center gap-4">
-          <div className="w-10 h-10 rounded-lg bg-cyber-purple/10 flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-cyber-purple" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold">{specialists}</p>
-            <p className="text-xs text-zinc-500">Especialistas</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Search & Filter */}
-      <div className="flex items-center gap-4">
+      {/* Filters */}
+      <div className="flex gap-3 mb-6">
         <div className="flex-1 relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
           <input
             type="text"
-            placeholder="Buscar agentes..."
+            placeholder="Buscar..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full input-modern pl-12 pr-4 py-3 rounded-xl text-sm"
+            className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 pl-10 text-sm focus:outline-none focus:border-neutral-700"
           />
         </div>
-        <div className="flex items-center gap-2">
-          {(['all', 'orchestrator', 'specialist'] as const).map((type) => (
-            <button
-              key={type}
-              onClick={() => setFilter(type)}
-              className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                filter === type
-                  ? 'bg-cyber-cyan/20 text-cyber-cyan border border-cyber-cyan/30'
-                  : 'btn-secondary'
-              }`}
-            >
-              {type === 'all' ? 'Todos' : type === 'orchestrator' ? 'Orquestradores' : 'Especialistas'}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Agents Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredAgents.map((agent, index) => (
-          <div key={agent.id} className="animate-slide-up" style={{ animationDelay: `${index * 0.05}s` }}>
-            <AgentCard agent={agent} />
-          </div>
-        ))}
-
-        {/* Add New Card */}
-        <Link
-          to="/agents/new"
-          className="glass rounded-2xl p-5 border-2 border-dashed border-zinc-700 hover:border-cyber-cyan/50 transition-colors flex flex-col items-center justify-center min-h-[240px] group"
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value as typeof filter)}
+          className="bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-neutral-700"
         >
-          <div className="w-14 h-14 rounded-2xl bg-zinc-800/50 flex items-center justify-center mb-4 group-hover:bg-cyber-cyan/10 transition-colors">
-            <Plus className="w-7 h-7 text-zinc-500 group-hover:text-cyber-cyan transition-colors" />
-          </div>
-          <p className="font-medium text-zinc-500 group-hover:text-zinc-300 transition-colors">Criar Novo Agente</p>
-        </Link>
+          <option value="all">Todos</option>
+          <option value="orchestrator">Orquestradores</option>
+          <option value="specialist">Especialistas</option>
+        </select>
       </div>
+
+      {/* Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {filteredAgents.map(agent => (
+          <AgentCard key={agent.id} agent={agent} />
+        ))}
+      </div>
+
+      {filteredAgents.length === 0 && (
+        <div className="text-center py-12 text-neutral-500">
+          Nenhum agente encontrado
+        </div>
+      )}
     </div>
   );
 };
 
-// Agent Editor Page
+// Schema Field Editor
+const SchemaFieldEditor: React.FC<{
+  fields: SchemaField[];
+  onChange: (fields: SchemaField[]) => void;
+  label: string;
+}> = ({ fields, onChange, label }) => {
+  const addField = () => {
+    onChange([...fields, { name: '', type: 'string', description: '', required: false }]);
+  };
+
+  const updateField = (index: number, updates: Partial<SchemaField>) => {
+    const newFields = [...fields];
+    newFields[index] = { ...newFields[index], ...updates };
+    onChange(newFields);
+  };
+
+  const removeField = (index: number) => {
+    onChange(fields.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-sm font-medium">{label}</label>
+        <button
+          type="button"
+          onClick={addField}
+          className="text-xs text-neutral-400 hover:text-white"
+        >
+          + Adicionar campo
+        </button>
+      </div>
+
+      {fields.length === 0 ? (
+        <p className="text-sm text-neutral-500 py-4 text-center border border-dashed border-neutral-800 rounded">
+          Nenhum campo definido
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {fields.map((field, index) => (
+            <div key={index} className="flex gap-2 items-start p-3 bg-neutral-900 rounded">
+              <input
+                type="text"
+                placeholder="nome"
+                value={field.name}
+                onChange={(e) => updateField(index, { name: e.target.value })}
+                className="flex-1 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-sm"
+              />
+              <select
+                value={field.type}
+                onChange={(e) => updateField(index, { type: e.target.value as SchemaField['type'] })}
+                className="bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-sm"
+              >
+                <option value="string">string</option>
+                <option value="number">number</option>
+                <option value="boolean">boolean</option>
+                <option value="json">json</option>
+                <option value="array">array</option>
+              </select>
+              <label className="flex items-center gap-1 text-xs text-neutral-400">
+                <input
+                  type="checkbox"
+                  checked={field.required}
+                  onChange={(e) => updateField(index, { required: e.target.checked })}
+                  className="rounded"
+                />
+                req
+              </label>
+              <button
+                type="button"
+                onClick={() => removeField(index)}
+                className="p-1 text-neutral-500 hover:text-red-400"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Agent Editor
 export const AgentEditor: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { agents, addAgent, updateAgent } = useApp();
+  const { agents, kbs, addAgent, updateAgent } = useApp();
 
   const existingAgent = id ? agents.find(a => a.id === id) : null;
   const isNew = !existingAgent;
+  const availableAgents = agents.filter(a => a.type === 'specialist');
 
   const [formData, setFormData] = useState<Partial<Agent>>(existingAgent || {
     type: 'specialist',
     name: '',
     role: '',
     description: '',
-    avatar: '🤖',
+    avatar: '',
     model: 'gpt-4o',
     provider: 'openai',
     temperature: 0.7,
@@ -225,28 +216,16 @@ export const AgentEditor: React.FC = () => {
     inputSchema: [],
     outputSchema: [],
     allowedActions: [],
+    allowedAgents: [],
+    orchestrationConfig: {
+      maxSteps: 10,
+      planningStrategy: 'dynamic',
+      evaluationMode: 'basic',
+      consolidationStrategy: 'summarize'
+    },
     status: 'draft',
     tags: [],
   });
-
-  const [activeTab, setActiveTab] = useState('basic');
-
-  const tabs = [
-    { id: 'basic', label: 'Básico', icon: Bot },
-    { id: 'model', label: 'Modelo', icon: Brain },
-    { id: 'prompt', label: 'Prompt', icon: Code },
-    { id: 'knowledge', label: 'Knowledge', icon: Database },
-    { id: 'advanced', label: 'Avançado', icon: Settings },
-  ];
-
-  const avatars = ['🤖', '👔', '📝', '💻', '🎨', '📊', '🔬', '🎯', '⚡', '🧠'];
-  const models = [
-    { value: 'gpt-4o', label: 'GPT-4o', provider: 'openai' },
-    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', provider: 'openai' },
-    { value: 'claude-3-5-sonnet', label: 'Claude 3.5 Sonnet', provider: 'anthropic' },
-    { value: 'claude-3-opus', label: 'Claude 3 Opus', provider: 'anthropic' },
-    { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro', provider: 'google' },
-  ];
 
   const handleSave = () => {
     if (isNew) {
@@ -262,294 +241,321 @@ export const AgentEditor: React.FC = () => {
     navigate('/agents');
   };
 
+  const isOrchestrator = formData.type === 'orchestrator';
+
   return (
-    <div className="space-y-6">
+    <div className="max-w-2xl">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate('/agents')}
-            className="w-10 h-10 rounded-xl bg-zinc-800/50 flex items-center justify-center hover:bg-zinc-700/50 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold">
-              {isNew ? 'Novo Agente' : `Editar: ${existingAgent?.name}`}
-            </h1>
-            <p className="text-sm text-zinc-500">
-              Configure as propriedades do agente
-            </p>
+      <div className="flex items-center gap-4 mb-6">
+        <button
+          onClick={() => navigate('/agents')}
+          className="p-2 rounded hover:bg-neutral-800 transition-colors"
+        >
+          <ArrowLeft size={20} />
+        </button>
+        <h1 className="text-xl font-semibold">
+          {isNew ? 'Novo Agente' : 'Editar Agente'}
+        </h1>
+      </div>
+
+      <div className="space-y-6">
+        {/* Tipo */}
+        <div>
+          <label className="block text-sm font-medium mb-2">Tipo</label>
+          <div className="grid grid-cols-2 gap-3">
+            {(['specialist', 'orchestrator'] as const).map(type => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => setFormData({ ...formData, type })}
+                className={`p-4 rounded border text-left transition-colors ${
+                  formData.type === type
+                    ? 'border-white bg-neutral-900'
+                    : 'border-neutral-800 hover:border-neutral-700'
+                }`}
+              >
+                <p className="font-medium mb-1">
+                  {type === 'orchestrator' ? 'Orquestrador' : 'Especialista'}
+                </p>
+                <p className="text-xs text-neutral-500">
+                  {type === 'orchestrator'
+                    ? 'Coordena outros agentes, planeja e delega'
+                    : 'Executa tarefas específicas com inputs/outputs definidos'}
+                </p>
+              </button>
+            ))}
           </div>
         </div>
-        <div className="flex items-center gap-3">
+
+        {/* Básico */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Nome</label>
+            <input
+              type="text"
+              value={formData.name || ''}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-neutral-700"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Role</label>
+            <input
+              type="text"
+              value={formData.role || ''}
+              onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+              className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-neutral-700"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-2">Descrição</label>
+          <textarea
+            value={formData.description || ''}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            rows={2}
+            className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-neutral-700 resize-none"
+          />
+        </div>
+
+        {/* Modelo */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Modelo</label>
+            <select
+              value={formData.model || ''}
+              onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+              className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-neutral-700"
+            >
+              <option value="gpt-4o">GPT-4o (OpenAI)</option>
+              <option value="gpt-4-turbo">GPT-4 Turbo (OpenAI)</option>
+              <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Anthropic)</option>
+              <option value="claude-3-opus">Claude 3 Opus (Anthropic)</option>
+              <option value="gemini-1.5-pro">Gemini 1.5 Pro (Google)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              Temperature: {formData.temperature}
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.1"
+              value={formData.temperature || 0.7}
+              onChange={(e) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
+              className="w-full mt-2"
+            />
+          </div>
+        </div>
+
+        {/* System Prompt */}
+        <div>
+          <label className="block text-sm font-medium mb-2">System Prompt</label>
+          <textarea
+            value={formData.systemPrompt || ''}
+            onChange={(e) => setFormData({ ...formData, systemPrompt: e.target.value })}
+            rows={4}
+            placeholder="Defina a persona e comportamento do agente..."
+            className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:border-neutral-700 resize-none"
+          />
+        </div>
+
+        {/* Configurações específicas por tipo */}
+        {isOrchestrator ? (
+          <>
+            {/* Orquestrador Config */}
+            <div className="border-t border-neutral-800 pt-6">
+              <h3 className="text-sm font-medium mb-4">Configuração de Orquestração</h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-1">Max Steps</label>
+                  <input
+                    type="number"
+                    value={formData.orchestrationConfig?.maxSteps || 10}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      orchestrationConfig: {
+                        ...formData.orchestrationConfig!,
+                        maxSteps: parseInt(e.target.value)
+                      }
+                    })}
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-1">Planning Strategy</label>
+                  <select
+                    value={formData.orchestrationConfig?.planningStrategy || 'dynamic'}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      orchestrationConfig: {
+                        ...formData.orchestrationConfig!,
+                        planningStrategy: e.target.value as 'sequential' | 'parallel' | 'dynamic'
+                      }
+                    })}
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm"
+                  >
+                    <option value="sequential">Sequential</option>
+                    <option value="parallel">Parallel</option>
+                    <option value="dynamic">Dynamic</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-1">Evaluation Mode</label>
+                  <select
+                    value={formData.orchestrationConfig?.evaluationMode || 'basic'}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      orchestrationConfig: {
+                        ...formData.orchestrationConfig!,
+                        evaluationMode: e.target.value as 'none' | 'basic' | 'critic_loop'
+                      }
+                    })}
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm"
+                  >
+                    <option value="none">None</option>
+                    <option value="basic">Basic</option>
+                    <option value="critic_loop">Critic Loop</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-1">Consolidation</label>
+                  <select
+                    value={formData.orchestrationConfig?.consolidationStrategy || 'summarize'}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      orchestrationConfig: {
+                        ...formData.orchestrationConfig!,
+                        consolidationStrategy: e.target.value as 'concatenate' | 'summarize' | 'best_of_n'
+                      }
+                    })}
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm"
+                  >
+                    <option value="concatenate">Concatenate</option>
+                    <option value="summarize">Summarize</option>
+                    <option value="best_of_n">Best of N</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Agentes Permitidos */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Agentes Permitidos</label>
+              <p className="text-xs text-neutral-500 mb-3">
+                Selecione os especialistas que este orquestrador pode coordenar
+              </p>
+              <div className="space-y-2">
+                {availableAgents.map(agent => (
+                  <label
+                    key={agent.id}
+                    className="flex items-center gap-3 p-3 bg-neutral-900 rounded cursor-pointer hover:bg-neutral-800"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formData.allowedAgents?.includes(agent.id) || false}
+                      onChange={(e) => {
+                        const current = formData.allowedAgents || [];
+                        setFormData({
+                          ...formData,
+                          allowedAgents: e.target.checked
+                            ? [...current, agent.id]
+                            : current.filter(id => id !== agent.id)
+                        });
+                      }}
+                      className="rounded"
+                    />
+                    <div>
+                      <p className="text-sm font-medium">{agent.name}</p>
+                      <p className="text-xs text-neutral-500">{agent.role}</p>
+                    </div>
+                  </label>
+                ))}
+                {availableAgents.length === 0 && (
+                  <p className="text-sm text-neutral-500 py-4 text-center">
+                    Nenhum especialista disponível
+                  </p>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Especialista Config */}
+            <div className="border-t border-neutral-800 pt-6">
+              <h3 className="text-sm font-medium mb-4">Contratos de Entrada/Saída</h3>
+
+              <div className="space-y-6">
+                <SchemaFieldEditor
+                  fields={formData.inputSchema || []}
+                  onChange={(fields) => setFormData({ ...formData, inputSchema: fields })}
+                  label="Input Schema"
+                />
+
+                <SchemaFieldEditor
+                  fields={formData.outputSchema || []}
+                  onChange={(fields) => setFormData({ ...formData, outputSchema: fields })}
+                  label="Output Schema"
+                />
+              </div>
+            </div>
+
+            {/* Knowledge Base */}
+            <div>
+              <label className="flex items-center gap-3 mb-3">
+                <input
+                  type="checkbox"
+                  checked={formData.ragEnabled || false}
+                  onChange={(e) => setFormData({ ...formData, ragEnabled: e.target.checked })}
+                  className="rounded"
+                />
+                <span className="text-sm font-medium">Habilitar RAG</span>
+              </label>
+
+              {formData.ragEnabled && (
+                <select
+                  value={formData.knowledgeBaseId || ''}
+                  onChange={(e) => setFormData({ ...formData, knowledgeBaseId: e.target.value })}
+                  className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm"
+                >
+                  <option value="">Selecione uma Knowledge Base</option>
+                  {kbs.map(kb => (
+                    <option key={kb.id} value={kb.id}>{kb.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center justify-between pt-6 border-t border-neutral-800">
           {!isNew && (
-            <button className="btn-secondary px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 text-red-400 hover:text-red-300">
-              <Trash2 className="w-4 h-4" />
+            <button className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300">
+              <Trash2 size={16} />
               Excluir
             </button>
           )}
-          <button
-            onClick={handleSave}
-            className="btn-primary px-5 py-2.5 rounded-xl font-semibold text-sm text-zinc-900 flex items-center gap-2"
-          >
-            <Save className="w-4 h-4" />
-            Salvar Agente
-          </button>
+          <div className="flex gap-3 ml-auto">
+            <button
+              onClick={() => navigate('/agents')}
+              className="px-4 py-2 text-sm text-neutral-400 hover:text-white"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSave}
+              className="flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded hover:bg-neutral-200"
+            >
+              <Save size={16} />
+              Salvar
+            </button>
+          </div>
         </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="glass rounded-2xl p-1.5 flex gap-1">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-              activeTab === tab.id
-                ? 'bg-zinc-800 text-white'
-                : 'text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Form Content */}
-      <div className="glass rounded-2xl p-6">
-        {activeTab === 'basic' && (
-          <div className="space-y-6">
-            {/* Type Selection */}
-            <div>
-              <label className="block text-sm font-medium mb-3">Tipo de Agente</label>
-              <div className="grid grid-cols-2 gap-4">
-                {(['specialist', 'orchestrator'] as const).map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => setFormData({ ...formData, type })}
-                    className={`p-4 rounded-xl border-2 transition-all text-left ${
-                      formData.type === type
-                        ? type === 'orchestrator'
-                          ? 'border-cyber-cyan bg-cyber-cyan/5'
-                          : 'border-cyber-purple bg-cyber-purple/5'
-                        : 'border-zinc-800 hover:border-zinc-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 mb-2">
-                      {type === 'orchestrator' ? (
-                        <GitBranch className={`w-5 h-5 ${formData.type === type ? 'text-cyber-cyan' : 'text-zinc-500'}`} />
-                      ) : (
-                        <Sparkles className={`w-5 h-5 ${formData.type === type ? 'text-cyber-purple' : 'text-zinc-500'}`} />
-                      )}
-                      <span className="font-medium">
-                        {type === 'orchestrator' ? 'Orquestrador' : 'Especialista'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-zinc-500">
-                      {type === 'orchestrator'
-                        ? 'Coordena outros agentes e delega tarefas'
-                        : 'Executa tarefas específicas com expertise'}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Avatar */}
-            <div>
-              <label className="block text-sm font-medium mb-3">Avatar</label>
-              <div className="flex gap-2">
-                {avatars.map((emoji) => (
-                  <button
-                    key={emoji}
-                    onClick={() => setFormData({ ...formData, avatar: emoji })}
-                    className={`w-12 h-12 rounded-xl text-2xl transition-all ${
-                      formData.avatar === emoji
-                        ? 'bg-cyber-cyan/20 border-2 border-cyber-cyan'
-                        : 'bg-zinc-800 hover:bg-zinc-700 border-2 border-transparent'
-                    }`}
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Name & Role */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Nome</label>
-                <input
-                  type="text"
-                  value={formData.name || ''}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Ex: Assistente de Marketing"
-                  className="w-full input-modern px-4 py-3 rounded-xl text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Role</label>
-                <input
-                  type="text"
-                  value={formData.role || ''}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  placeholder="Ex: Copywriter"
-                  className="w-full input-modern px-4 py-3 rounded-xl text-sm"
-                />
-              </div>
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Descrição</label>
-              <textarea
-                value={formData.description || ''}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Descreva o que este agente faz..."
-                rows={3}
-                className="w-full input-modern px-4 py-3 rounded-xl text-sm resize-none"
-              />
-            </div>
-
-            {/* Tags */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Tags</label>
-              <input
-                type="text"
-                placeholder="marketing, seo, conteúdo (separados por vírgula)"
-                className="w-full input-modern px-4 py-3 rounded-xl text-sm"
-              />
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'model' && (
-          <div className="space-y-6">
-            {/* Model Selection */}
-            <div>
-              <label className="block text-sm font-medium mb-3">Modelo de IA</label>
-              <div className="grid grid-cols-1 gap-2">
-                {models.map((model) => (
-                  <button
-                    key={model.value}
-                    onClick={() => setFormData({ ...formData, model: model.value, provider: model.provider })}
-                    className={`p-4 rounded-xl border transition-all text-left flex items-center justify-between ${
-                      formData.model === model.value
-                        ? 'border-cyber-cyan bg-cyber-cyan/5'
-                        : 'border-zinc-800 hover:border-zinc-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        model.provider === 'openai' ? 'bg-green-500/10' :
-                        model.provider === 'anthropic' ? 'bg-orange-500/10' : 'bg-blue-500/10'
-                      }`}>
-                        <Brain className={`w-5 h-5 ${
-                          model.provider === 'openai' ? 'text-green-500' :
-                          model.provider === 'anthropic' ? 'text-orange-500' : 'text-blue-500'
-                        }`} />
-                      </div>
-                      <div>
-                        <p className="font-medium">{model.label}</p>
-                        <p className="text-xs text-zinc-500 capitalize">{model.provider}</p>
-                      </div>
-                    </div>
-                    {formData.model === model.value && (
-                      <div className="w-5 h-5 rounded-full bg-cyber-cyan flex items-center justify-center">
-                        <span className="text-zinc-900 text-xs">✓</span>
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Temperature */}
-            <div>
-              <label className="block text-sm font-medium mb-3">
-                Temperature: <span className="text-cyber-cyan">{formData.temperature}</span>
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={formData.temperature || 0.7}
-                onChange={(e) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
-                className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-cyber-cyan"
-              />
-              <div className="flex justify-between mt-2 text-xs text-zinc-500">
-                <span>Preciso</span>
-                <span>Criativo</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'prompt' && (
-          <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium mb-2">System Prompt</label>
-              <textarea
-                value={formData.systemPrompt || ''}
-                onChange={(e) => setFormData({ ...formData, systemPrompt: e.target.value })}
-                placeholder="Você é um assistente especializado em..."
-                rows={12}
-                className="w-full input-modern px-4 py-3 rounded-xl text-sm font-mono resize-none"
-              />
-              <p className="text-xs text-zinc-500 mt-2">
-                Defina a persona e comportamento base do agente
-              </p>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'knowledge' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-900/50 border border-zinc-800">
-              <div className="flex items-center gap-3">
-                <Database className="w-5 h-5 text-cyber-purple" />
-                <div>
-                  <p className="font-medium">RAG Habilitado</p>
-                  <p className="text-xs text-zinc-500">Conecte a uma Knowledge Base</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setFormData({ ...formData, ragEnabled: !formData.ragEnabled })}
-                className={`w-12 h-6 rounded-full transition-all ${
-                  formData.ragEnabled ? 'bg-cyber-purple' : 'bg-zinc-700'
-                }`}
-              >
-                <div className={`w-5 h-5 rounded-full bg-white transform transition-transform ${
-                  formData.ragEnabled ? 'translate-x-6' : 'translate-x-0.5'
-                }`}></div>
-              </button>
-            </div>
-
-            {formData.ragEnabled && (
-              <div className="p-4 rounded-xl border border-dashed border-zinc-700 text-center">
-                <Database className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
-                <p className="text-sm text-zinc-500">Selecione uma Knowledge Base</p>
-                <button className="mt-3 btn-secondary px-4 py-2 rounded-lg text-sm">
-                  Escolher KB
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'advanced' && (
-          <div className="space-y-6">
-            <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800">
-              <p className="text-sm text-zinc-400">
-                Configurações avançadas como schemas de entrada/saída, ações permitidas e
-                configuração de orquestração estarão disponíveis em breve.
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
