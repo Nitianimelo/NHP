@@ -1,304 +1,237 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { createOpenRouterClient, ChatMessage } from '../lib/openrouter';
 import { useApp } from '../AppContext';
-import { Send, Loader2, Bot, User, ChevronDown, AlertCircle } from 'lucide-react';
-import { OpenRouterClient } from '../lib/openrouter';
-import { Agent } from '../types';
+import { Bot, Send, Trash2 } from 'lucide-react';
 
-interface Message {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp: Date;
-  agentName?: string;
-  status?: 'sending' | 'sent' | 'error';
-  steps?: Array<{
-    agentName: string;
-    description: string;
-    status: 'pending' | 'running' | 'completed' | 'failed';
-  }>;
-}
+const getChatStorageKey = (orchestratorId: string) => `nhp_orchestrator_chat_${orchestratorId}`;
 
 export const Chat: React.FC = () => {
-  const { agents, apiConfig, createRun } = useApp();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { agents, apiConfig } = useApp();
+  const orchestrators = useMemo(
+    () => agents.filter(agent => agent.type === 'orchestrator'),
+    [agents]
+  );
+  const [selectedId, setSelectedId] = useState(orchestrators[0]?.id || '');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedOrchestrator, setSelectedOrchestrator] = useState<Agent | null>(null);
-  const [showOrchestratorSelect, setShowOrchestratorSelect] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const orchestrators = agents.filter(a => a.type === 'orchestrator');
-  const specialists = agents.filter(a => a.type === 'specialist');
-
-  // Auto-select first orchestrator
   useEffect(() => {
-    if (!selectedOrchestrator && orchestrators.length > 0) {
-      setSelectedOrchestrator(orchestrators[0]);
+    if (!selectedId && orchestrators.length > 0) {
+      setSelectedId(orchestrators[0].id);
     }
-  }, [orchestrators, selectedOrchestrator]);
+  }, [orchestrators, selectedId]);
 
-  // Scroll to bottom on new messages
+  const selectedOrchestrator = useMemo(
+    () => orchestrators.find(orchestrator => orchestrator.id === selectedId),
+    [orchestrators, selectedId]
+  );
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  // Auto-resize textarea
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-    e.target.style.height = 'auto';
-    e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
-  };
-
-  const handleSend = async () => {
-    if (!input.trim() || isLoading || !selectedOrchestrator) return;
-
-    const userMessage: Message = {
-      id: `msg-${Date.now()}`,
-      role: 'user',
-      content: input.trim(),
-      timestamp: new Date(),
-      status: 'sent'
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInput('');
-    setIsLoading(true);
-
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto';
+    if (!selectedId) return;
+    try {
+      const stored = localStorage.getItem(getChatStorageKey(selectedId));
+      setMessages(stored ? JSON.parse(stored) : []);
+    } catch {
+      setMessages([]);
     }
+  }, [selectedId]);
 
-    // Check if API key is configured
-    if (!apiConfig.openRouterKey) {
-      const errorMessage: Message = {
-        id: `msg-${Date.now()}-error`,
-        role: 'system',
-        content: 'Configure sua API Key do OpenRouter na página de API para usar o chat.',
-        timestamp: new Date(),
-        status: 'error'
-      };
-      setMessages(prev => [...prev, errorMessage]);
-      setIsLoading(false);
+  useEffect(() => {
+    if (!selectedId) return;
+    try {
+      localStorage.setItem(getChatStorageKey(selectedId), JSON.stringify(messages));
+    } catch {}
+  }, [messages, selectedId]);
+
+  const sendMessage = async () => {
+    if (!selectedOrchestrator || !input.trim() || sending) return;
+    const client = createOpenRouterClient(apiConfig);
+    if (!client) {
+      setError('Configure sua chave do OpenRouter antes de enviar mensagens.');
       return;
     }
 
+    setError(null);
+    setSending(true);
+
+    const nextMessages: ChatMessage[] = [
+      ...messages,
+      { role: 'user', content: input.trim() },
+    ];
+    setMessages(nextMessages);
+    setInput('');
+
+    const systemPrompt = selectedOrchestrator.systemPrompt?.trim();
+    const payloadMessages = [
+      ...(systemPrompt ? [{ role: 'system', content: systemPrompt } as ChatMessage] : []),
+      ...nextMessages,
+    ];
+
     try {
-      const client = new OpenRouterClient(apiConfig.openRouterKey);
-
-      // Build context about available specialists
-      const specialistsContext = specialists.map(s =>
-        `- ${s.name}: ${s.role} - ${s.description}`
-      ).join('\n');
-
-      const systemPrompt = `${selectedOrchestrator.systemPrompt}
-
-Você é o orquestrador "${selectedOrchestrator.name}".
-Sua função: ${selectedOrchestrator.role}
-
-Agentes especialistas disponíveis:
-${specialistsContext}
-
-Ao receber uma tarefa:
-1. Analise o que precisa ser feito
-2. Indique quais agentes seriam acionados e em qual ordem
-3. Forneça uma resposta clara e estruturada
-
-Responda de forma direta e objetiva.`;
-
       const response = await client.chat({
-        model: selectedOrchestrator.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...messages.filter(m => m.role !== 'system').map(m => ({
-            role: m.role as 'user' | 'assistant',
-            content: m.content
-          })),
-          { role: 'user', content: userMessage.content }
-        ],
-        temperature: selectedOrchestrator.temperature || 0.7,
-        max_tokens: 2048
+        model: selectedOrchestrator.model || 'gpt-4o',
+        messages: payloadMessages,
+        temperature: selectedOrchestrator.temperature ?? 0.7,
       });
-
-      const assistantMessage: Message = {
-        id: `msg-${Date.now()}-response`,
-        role: 'assistant',
-        content: response.choices[0]?.message?.content || 'Sem resposta',
-        timestamp: new Date(),
-        agentName: selectedOrchestrator.name,
-        status: 'sent'
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-
-      // Create a run record
-      createRun(selectedOrchestrator.id, userMessage.content);
-
-    } catch (error) {
-      const errorMessage: Message = {
-        id: `msg-${Date.now()}-error`,
-        role: 'system',
-        content: `Erro: ${error instanceof Error ? error.message : 'Falha na comunicação'}`,
-        timestamp: new Date(),
-        status: 'error'
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      const assistantMessage = response.choices[0]?.message?.content || 'Sem resposta do modelo.';
+      setMessages(prev => [...prev, { role: 'assistant', content: assistantMessage }]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao chamar o OpenRouter.';
+      setError(message);
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: 'Não consegui responder. Tente novamente.' },
+      ]);
     } finally {
-      setIsLoading(false);
+      setSending(false);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+  const clearChat = () => {
+    if (!selectedId) return;
+    setMessages([]);
+    try {
+      localStorage.removeItem(getChatStorageKey(selectedId));
+    } catch {}
   };
+
+  if (orchestrators.length === 0) {
+    return (
+      <div className="max-w-2xl space-y-4">
+        <h1 className="text-xl font-semibold">Chat com Orquestrador</h1>
+        <p className="text-sm text-neutral-400">
+          Você ainda não tem nenhum orquestrador cadastrado.
+        </p>
+        <Link
+          to="/agents/new"
+          className="inline-flex items-center gap-2 px-3 py-2 bg-white text-black text-sm font-medium rounded hover:bg-neutral-200"
+        >
+          <Bot size={16} />
+          Criar Orquestrador
+        </Link>
+      </div>
+    );
+  }
 
   return (
-    <div className="h-full flex flex-col max-w-4xl mx-auto">
-      {/* Header with orchestrator selector */}
-      <div className="flex items-center justify-between pb-4 border-b border-neutral-800 mb-4">
-        <h1 className="text-xl font-semibold">Chat</h1>
+    <div className="max-w-4xl space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Chat com Orquestrador</h1>
+          <p className="text-sm text-neutral-500">
+            Converse diretamente com o orquestrador para testar o fluxo completo.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={clearChat}
+          className="inline-flex items-center gap-2 px-3 py-2 text-sm text-neutral-300 border border-neutral-800 rounded hover:bg-neutral-900"
+        >
+          <Trash2 size={14} />
+          Limpar conversa
+        </button>
+      </div>
 
-        <div className="relative">
-          <button
-            onClick={() => setShowOrchestratorSelect(!showOrchestratorSelect)}
-            className="flex items-center gap-2 px-3 py-2 bg-neutral-900 border border-neutral-800 rounded hover:border-neutral-700 text-sm"
+      <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
+        <div className="space-y-3">
+          <label className="text-xs uppercase text-neutral-500">Orquestrador ativo</label>
+          <select
+            value={selectedId}
+            onChange={(event) => setSelectedId(event.target.value)}
+            className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-neutral-700"
           >
-            <Bot size={16} className="text-neutral-400" />
-            <span>{selectedOrchestrator?.name || 'Selecionar Orquestrador'}</span>
-            <ChevronDown size={14} className="text-neutral-500" />
-          </button>
+            {orchestrators.map(orchestrator => (
+              <option key={orchestrator.id} value={orchestrator.id}>
+                {orchestrator.name}
+              </option>
+            ))}
+          </select>
 
-          {showOrchestratorSelect && (
-            <div className="absolute right-0 mt-1 w-64 bg-neutral-900 border border-neutral-800 rounded-lg shadow-xl z-10">
-              {orchestrators.length === 0 ? (
-                <div className="p-4 text-sm text-neutral-500 text-center">
-                  Nenhum orquestrador configurado
-                </div>
-              ) : (
-                orchestrators.map(orch => (
-                  <button
-                    key={orch.id}
-                    onClick={() => {
-                      setSelectedOrchestrator(orch);
-                      setShowOrchestratorSelect(false);
-                    }}
-                    className={`w-full px-4 py-3 text-left hover:bg-neutral-800 transition-colors ${
-                      selectedOrchestrator?.id === orch.id ? 'bg-neutral-800' : ''
-                    }`}
-                  >
-                    <p className="text-sm font-medium">{orch.name}</p>
-                    <p className="text-xs text-neutral-500">{orch.role}</p>
-                  </button>
-                ))
-              )}
+          {selectedOrchestrator && (
+            <div className="p-3 bg-neutral-900 rounded text-xs text-neutral-400 space-y-2">
+              <div>
+                <p className="text-neutral-500 mb-1">Modelo</p>
+                <p className="text-sm text-neutral-200">{selectedOrchestrator.model}</p>
+              </div>
+              <div>
+                <p className="text-neutral-500 mb-1">Role</p>
+                <p className="text-sm text-neutral-200">{selectedOrchestrator.role}</p>
+              </div>
+            </div>
+          )}
+
+          {!apiConfig.openRouterKey && (
+            <div className="rounded border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+              Configure a API do OpenRouter para liberar o chat.{' '}
+              <Link to="/api" className="underline text-amber-100">
+                Ir para configuração
+              </Link>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto space-y-4 pb-4">
-        {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-neutral-500">
-            <Bot size={48} className="mb-4 opacity-20" />
-            <p className="text-sm mb-2">Inicie uma conversa com o orquestrador</p>
-            <p className="text-xs text-neutral-600">
-              {selectedOrchestrator
-                ? `${selectedOrchestrator.name} está pronto para receber tarefas`
-                : 'Selecione um orquestrador acima'}
-            </p>
-          </div>
-        ) : (
-          messages.map(message => (
-            <div
-              key={message.id}
-              className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : ''}`}
-            >
-              {message.role !== 'user' && (
-                <div className={`w-8 h-8 rounded flex items-center justify-center shrink-0 ${
-                  message.status === 'error'
-                    ? 'bg-red-500/10 text-red-500'
-                    : 'bg-neutral-800 text-neutral-400'
-                }`}>
-                  {message.status === 'error' ? <AlertCircle size={16} /> : <Bot size={16} />}
-                </div>
-              )}
-
-              <div className={`max-w-[80%] ${message.role === 'user' ? 'order-1' : ''}`}>
-                {message.agentName && (
-                  <p className="text-xs text-neutral-500 mb-1">{message.agentName}</p>
-                )}
-                <div className={`rounded-lg px-4 py-3 ${
-                  message.role === 'user'
-                    ? 'bg-white text-black'
-                    : message.status === 'error'
-                    ? 'bg-red-500/10 border border-red-500/20 text-red-400'
-                    : 'bg-neutral-900 border border-neutral-800 text-neutral-200'
-                }`}>
-                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                </div>
-                <p className="text-xs text-neutral-600 mt-1">
-                  {message.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                </p>
+        <div className="flex flex-col border border-neutral-800 rounded-lg overflow-hidden">
+          <div className="flex-1 min-h-[360px] p-4 space-y-4 overflow-y-auto bg-neutral-950">
+            {messages.length === 0 && (
+              <div className="text-sm text-neutral-500">
+                Envie uma mensagem para iniciar a conversa com o orquestrador.
               </div>
-
-              {message.role === 'user' && (
-                <div className="w-8 h-8 rounded bg-neutral-700 flex items-center justify-center shrink-0">
-                  <User size={16} className="text-neutral-300" />
-                </div>
-              )}
-            </div>
-          ))
-        )}
-
-        {isLoading && (
-          <div className="flex gap-3">
-            <div className="w-8 h-8 rounded bg-neutral-800 flex items-center justify-center">
-              <Loader2 size={16} className="text-neutral-400 animate-spin" />
-            </div>
-            <div className="bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-3">
-              <p className="text-sm text-neutral-400">Processando...</p>
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input area */}
-      <div className="border-t border-neutral-800 pt-4">
-        <div className="flex gap-3">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder={selectedOrchestrator
-              ? `Envie uma tarefa para ${selectedOrchestrator.name}...`
-              : 'Selecione um orquestrador primeiro...'
-            }
-            disabled={!selectedOrchestrator || isLoading}
-            rows={1}
-            className="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-3 text-sm resize-none focus:outline-none focus:border-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || isLoading || !selectedOrchestrator}
-            className="px-4 py-3 bg-white text-black rounded-lg hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isLoading ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <Send size={18} />
             )}
-          </button>
+            {messages.map((message, index) => (
+              <div
+                key={`${message.role}-${index}`}
+                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                    message.role === 'user'
+                      ? 'bg-white text-black'
+                      : message.role === 'system'
+                        ? 'bg-neutral-800 text-neutral-200'
+                        : 'bg-neutral-900 text-neutral-200 border border-neutral-800'
+                  }`}
+                >
+                  <p className="text-xs uppercase text-neutral-500 mb-1">
+                    {message.role === 'user' ? 'Você' : 'Orquestrador'}
+                  </p>
+                  <p className="whitespace-pre-wrap">
+                    {typeof message.content === 'string'
+                      ? message.content
+                      : JSON.stringify(message.content)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {error && (
+            <div className="px-4 py-2 text-xs text-red-300 bg-red-500/10 border-t border-red-500/20">
+              {error}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 p-3 border-t border-neutral-800 bg-neutral-950">
+            <textarea
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              placeholder="Digite sua mensagem..."
+              rows={2}
+              className="flex-1 bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm resize-none focus:outline-none focus:border-neutral-700"
+            />
+            <button
+              type="button"
+              onClick={sendMessage}
+              disabled={!input.trim() || sending}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Send size={16} />
+              {sending ? 'Enviando...' : 'Enviar'}
+            </button>
+          </div>
         </div>
-        <p className="text-xs text-neutral-600 mt-2">
-          Shift + Enter para nova linha
-        </p>
       </div>
     </div>
   );

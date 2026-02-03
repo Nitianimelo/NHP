@@ -28,6 +28,7 @@ const App = () => {
             <Route path="/agents/:id" element={<AgentEditor />} />
 
             <Route path="/runs" element={<Runs />} />
+            <Route path="/chat" element={<Chat />} />
             <Route path="/knowledge" element={<Knowledge />} />
             <Route path="/api" element={<Api />} />
             <Route path="/settings" element={<SettingsPlaceholder />} />
