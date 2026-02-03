@@ -1,9 +1,15 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="pt-BR" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nini Hub Paradise</title>
+    <meta name="description" content="NHP - Sistema Operacional Cognitivo para orquestração de agentes de IA" />
+    <meta name="theme-color" content="#09090b" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%A0%3C/text%3E%3C/svg%3E" />
+    <title>NHP - Cognitive OS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -12,59 +18,275 @@
           extend: {
             colors: {
               zinc: {
-                850: '#1f2025',
-                900: '#18181b',
+                850: '#1c1c21',
+                900: '#131316',
                 950: '#09090b',
               },
-              primary: {
-                500: '#10b981', // Emerald accent
-                600: '#059669',
+              cyber: {
+                cyan: '#00f0ff',
+                purple: '#a855f7',
+                pink: '#ec4899',
+                blue: '#3b82f6',
+                green: '#10b981',
               }
             },
             fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-              mono: ['Fira Code', 'monospace'],
+              sans: ['Inter', 'system-ui', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
+            },
+            backgroundImage: {
+              'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+              'grid-pattern': 'linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px)',
+            },
+            animation: {
+              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'glow': 'glow 2s ease-in-out infinite alternate',
+              'float': 'float 6s ease-in-out infinite',
+              'slide-up': 'slideUp 0.5s ease-out',
+              'slide-in': 'slideIn 0.3s ease-out',
+              'fade-in': 'fadeIn 0.4s ease-out',
             },
           },
         },
       };
     </script>
     <style>
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: #3f3f46 transparent;
+      }
+
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: linear-gradient(180deg, #3f3f46 0%, #27272a 100%);
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(180deg, #52525b 0%, #3f3f46 100%);
+      }
+
+      @keyframes glow {
+        from { filter: drop-shadow(0 0 2px currentColor); }
+        to { filter: drop-shadow(0 0 10px currentColor) drop-shadow(0 0 20px currentColor); }
+      }
+
+      @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+      }
+
+      @keyframes slideUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      @keyframes slideIn {
+        from { opacity: 0; transform: translateX(-10px); }
+        to { opacity: 1; transform: translateX(0); }
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      @keyframes gradient-shift {
+        0%, 100% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+      }
+
+      @keyframes border-flow {
+        0%, 100% { background-position: 0% 0%; }
+        50% { background-position: 100% 100%; }
+      }
+
       body {
         background-color: #09090b;
         color: #e4e4e7;
+        font-family: 'Inter', system-ui, sans-serif;
       }
-      /* Custom Scrollbar */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+
+      .glass {
+        background: rgba(24, 24, 27, 0.6);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(63, 63, 70, 0.4);
       }
-      ::-webkit-scrollbar-track {
-        background: #18181b; 
+
+      .glass-strong {
+        background: rgba(24, 24, 27, 0.8);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(63, 63, 70, 0.5);
       }
-      ::-webkit-scrollbar-thumb {
-        background: #3f3f46; 
-        border-radius: 4px;
+
+      .gradient-text {
+        background: linear-gradient(135deg, #00f0ff 0%, #a855f7 50%, #ec4899 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #52525b; 
+
+      .gradient-border {
+        position: relative;
+        background: linear-gradient(135deg, rgba(0,240,255,0.1), rgba(168,85,247,0.1));
+      }
+
+      .gradient-border::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        padding: 1px;
+        border-radius: inherit;
+        background: linear-gradient(135deg, rgba(0,240,255,0.5), rgba(168,85,247,0.5), rgba(236,72,153,0.5));
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        pointer-events: none;
+      }
+
+      .glow-cyan {
+        box-shadow: 0 0 20px rgba(0, 240, 255, 0.15), 0 0 40px rgba(0, 240, 255, 0.05);
+      }
+
+      .glow-purple {
+        box-shadow: 0 0 20px rgba(168, 85, 247, 0.15), 0 0 40px rgba(168, 85, 247, 0.05);
+      }
+
+      .glow-pink {
+        box-shadow: 0 0 20px rgba(236, 72, 153, 0.15), 0 0 40px rgba(236, 72, 153, 0.05);
+      }
+
+      .text-glow-cyan {
+        text-shadow: 0 0 10px rgba(0, 240, 255, 0.5), 0 0 20px rgba(0, 240, 255, 0.3);
+      }
+
+      .card-hover {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .card-hover:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3), 0 0 30px rgba(0, 240, 255, 0.1);
+      }
+
+      .bg-noise {
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      }
+
+      .grid-bg {
+        background-size: 40px 40px;
+        background-image:
+          linear-gradient(to right, rgba(63, 63, 70, 0.1) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(63, 63, 70, 0.1) 1px, transparent 1px);
+      }
+
+      .status-dot {
+        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+
+      .sidebar-item {
+        position: relative;
+        transition: all 0.2s ease;
+      }
+
+      .sidebar-item::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 3px;
+        height: 0;
+        background: linear-gradient(180deg, #00f0ff, #a855f7);
+        border-radius: 0 2px 2px 0;
+        transition: height 0.2s ease;
+      }
+
+      .sidebar-item:hover::before,
+      .sidebar-item.active::before {
+        height: 60%;
+      }
+
+      .sidebar-item.active {
+        background: linear-gradient(90deg, rgba(0,240,255,0.1), transparent);
+      }
+
+      .tag {
+        font-size: 0.65rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .input-modern {
+        background: rgba(24, 24, 27, 0.6);
+        border: 1px solid rgba(63, 63, 70, 0.5);
+        transition: all 0.2s ease;
+      }
+
+      .input-modern:focus {
+        border-color: rgba(0, 240, 255, 0.5);
+        box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.1);
+        outline: none;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #00f0ff 0%, #a855f7 100%);
+        transition: all 0.3s ease;
+      }
+
+      .btn-primary:hover {
+        box-shadow: 0 0 20px rgba(0, 240, 255, 0.4), 0 0 40px rgba(168, 85, 247, 0.2);
+        transform: translateY(-1px);
+      }
+
+      .btn-secondary {
+        background: rgba(63, 63, 70, 0.3);
+        border: 1px solid rgba(63, 63, 70, 0.5);
+        transition: all 0.2s ease;
+      }
+
+      .btn-secondary:hover {
+        background: rgba(63, 63, 70, 0.5);
+        border-color: rgba(0, 240, 255, 0.3);
+      }
+
+      .progress-bar {
+        background: linear-gradient(90deg, #00f0ff, #a855f7, #ec4899);
+        background-size: 200% 100%;
+        animation: gradient-shift 3s ease infinite;
+      }
+
+      .orb {
+        position: fixed;
+        border-radius: 50%;
+        filter: blur(80px);
+        pointer-events: none;
+        opacity: 0.3;
+      }
+
+      .timeline-line {
+        background: linear-gradient(180deg, #00f0ff 0%, #a855f7 50%, transparent 100%);
+      }
+
+      .line-clamp-2 {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
-  <body>
+  </head>
+  <body class="bg-noise">
+    <div class="orb w-96 h-96 bg-cyber-cyan top-0 -left-48"></div>
+    <div class="orb w-96 h-96 bg-cyber-purple bottom-0 right-0"></div>
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>
