@@ -1,0 +1,38 @@
+import React from 'react';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AppProvider } from './AppContext';
+import { Layout } from './components/Layout';
+import { Dashboard } from './pages/Dashboard';
+import { Welcome } from './pages/Welcome';
+import { AgentsList, AgentEditor } from './pages/Agents';
+import { Runs } from './pages/Runs';
+import { Knowledge } from './pages/Knowledge';
+
+const SettingsPlaceholder = () => <div className="text-white">Página de Configurações (Mock)</div>;
+
+const App = () => {
+  return (
+    <AppProvider>
+      <Router>
+        <Layout>
+          <Routes>
+            <Route path="/welcome" element={<Welcome />} />
+            <Route path="/" element={<Dashboard />} />
+            
+            <Route path="/agents" element={<AgentsList />} />
+            <Route path="/agents/new" element={<AgentEditor />} />
+            <Route path="/agents/:id" element={<AgentEditor />} />
+            
+            <Route path="/runs" element={<Runs />} />
+            <Route path="/knowledge" element={<Knowledge />} />
+            <Route path="/settings" element={<SettingsPlaceholder />} />
+            
+            <Route path="*" element={<Navigate to="/welcome" replace />} />
+          </Routes>
+        </Layout>
+      </Router>
+    </AppProvider>
+  );
+};
+
+export default App;
