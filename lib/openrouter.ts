@@ -247,33 +247,25 @@ export class OpenRouterClient {
 
   // === Image Generation ===
   async generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResponse> {
-    // For image generation, we use the chat endpoint with specific models
-    // Models like dall-e-3 are called through chat completions
-    const response = await this.chat({
-      model: request.model,
-      messages: [
-        {
-          role: 'user',
-          content: request.prompt,
-        },
-      ],
-      // Some image models use these parameters differently
-      max_tokens: 1024,
+    const response = await fetch(`${OPENROUTER_BASE_URL}/images/generations`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        model: request.model,
+        prompt: request.prompt,
+        n: request.n || 1,
+        size: request.size || '1024x1024',
+        quality: request.quality,
+        style: request.style,
+      }),
     });
 
-    // For models that return images directly in content
-    // This depends on the specific model's behavior
-    const content = response.choices[0]?.message?.content;
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error?.message || `Image generation failed: ${response.status}`);
+    }
 
-    // Parse image URLs from response if present
-    const urlMatch = content?.match(/https?:\/\/[^\s)]+\.(png|jpg|jpeg|webp|gif)/gi);
-
-    return {
-      created: Date.now(),
-      data: urlMatch
-        ? urlMatch.map(url => ({ url, revised_prompt: request.prompt }))
-        : [{ revised_prompt: content || request.prompt }],
-    };
+    return response.json();
   }
 
   // === Image Analysis (Vision) ===
