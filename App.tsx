@@ -7,6 +7,7 @@ import { Welcome } from './pages/Welcome';
 import { AgentsList, AgentEditor } from './pages/Agents';
 import { Runs } from './pages/Runs';
 import { Knowledge } from './pages/Knowledge';
+import { Api } from './pages/Api';
 
 const SettingsPlaceholder = () => <div className="text-white">Página de Configurações (Mock)</div>;
 
@@ -25,6 +26,7 @@ const App = () => {
             
             <Route path="/runs" element={<Runs />} />
             <Route path="/knowledge" element={<Knowledge />} />
+            <Route path="/api" element={<Api />} />
             <Route path="/settings" element={<SettingsPlaceholder />} />
             
             <Route path="*" element={<Navigate to="/welcome" replace />} />
