@@ -257,12 +257,33 @@ export const createExecutionPlan = async (
     context
   );
 
+  // Add JSON instruction to system prompt
+  const systemPrompt = `${orchestrator.systemPrompt || 'You are an orchestrator that plans task execution.'}
+
+IMPORTANT: You MUST respond with valid JSON only. No markdown, no explanations outside JSON.
+The JSON must have this exact structure:
+{
+  "reasoning": "your analysis of what needs to be done",
+  "steps": [
+    {
+      "stepId": "step1",
+      "agentId": "the agent id from the available agents",
+      "description": "what this step does",
+      "inputMapping": { "fieldName": "user_input.goal" },
+      "dependsOn": []
+    }
+  ],
+  "strategy": "sequential"
+}`;
+
   const messages: ChatMessage[] = [
-    { role: 'system', content: orchestrator.systemPrompt },
+    { role: 'system', content: systemPrompt },
     { role: 'user', content: prompt },
   ];
 
-  const response = await client.chatWithSchema<{
+  // Try with schema first (works with OpenAI models)
+  // If fails, fallback to regular chat with JSON parsing
+  let planData: {
     reasoning: string;
     steps: Array<{
       stepId: string;
@@ -272,32 +293,64 @@ export const createExecutionPlan = async (
       dependsOn: string[];
     }>;
     strategy: 'sequential' | 'parallel' | 'mixed';
-  }>(
-    {
+  };
+
+  try {
+    const response = await client.chatWithSchema<typeof planData>(
+      {
+        model: orchestrator.model,
+        messages,
+        temperature: orchestrator.temperature,
+      },
+      ORCHESTRATOR_PLAN_SCHEMA
+    );
+    planData = response.data;
+  } catch {
+    // Fallback: use regular chat and parse JSON
+    const response = await client.chat({
       model: orchestrator.model,
       messages,
       temperature: orchestrator.temperature,
-    },
-    ORCHESTRATOR_PLAN_SCHEMA
-  );
+      max_tokens: 2048,
+    });
+
+    const content = response.choices[0]?.message?.content || '';
+
+    // Try to extract JSON from response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('Orchestrator did not return valid JSON plan');
+    }
+
+    try {
+      planData = JSON.parse(jsonMatch[0]);
+    } catch {
+      throw new Error('Failed to parse orchestrator plan JSON');
+    }
+
+    // Validate required fields
+    if (!planData.steps || !Array.isArray(planData.steps)) {
+      throw new Error('Orchestrator plan missing steps array');
+    }
+  }
 
   const plan: ExecutionPlan = {
     goal,
-    reasoning: response.data.reasoning,
-    steps: response.data.steps.map((s, i) => {
+    reasoning: planData.reasoning || 'No reasoning provided',
+    steps: planData.steps.map((s, i) => {
       const agent = availableAgents.find(a => a.id === s.agentId);
       return {
-        stepId: s.stepId,
+        stepId: s.stepId || `step${i + 1}`,
         agentId: s.agentId,
         agentName: agent?.name || s.agentId,
-        description: s.description,
-        inputMapping: s.inputMapping,
-        dependsOn: s.dependsOn,
+        description: s.description || '',
+        inputMapping: s.inputMapping || {},
+        dependsOn: s.dependsOn || [],
         priority: i,
       };
     }),
-    estimatedSteps: response.data.steps.length,
-    strategy: response.data.strategy,
+    estimatedSteps: planData.steps.length,
+    strategy: planData.strategy || 'sequential',
   };
 
   return plan;
