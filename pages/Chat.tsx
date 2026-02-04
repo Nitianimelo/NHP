@@ -1,13 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { createOpenRouterClient, ChatMessage } from '../lib/openrouter';
 import { useApp } from '../AppContext';
-import { Bot, Send, Trash2 } from 'lucide-react';
+import { Bot, Send, Trash2, Play, MessageSquare, Loader2 } from 'lucide-react';
 
 const getChatStorageKey = (orchestratorId: string) => `nhp_orchestrator_chat_${orchestratorId}`;
 
+type ChatMode = 'chat' | 'execute';
+
 export const Chat: React.FC = () => {
-  const { agents, apiConfig } = useApp();
+  const navigate = useNavigate();
+  const { agents, apiConfig, executeOrchestration } = useApp();
   const orchestrators = useMemo(
     () => agents.filter(agent => agent.type === 'orchestrator'),
     [agents]
@@ -17,6 +20,8 @@ export const Chat: React.FC = () => {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<ChatMode>('execute');
+  const [lastRunId, setLastRunId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedId && orchestrators.length > 0) {
@@ -27,6 +32,14 @@ export const Chat: React.FC = () => {
   const selectedOrchestrator = useMemo(
     () => orchestrators.find(orchestrator => orchestrator.id === selectedId),
     [orchestrators, selectedId]
+  );
+
+  const specialists = useMemo(
+    () => agents.filter(a =>
+      a.type === 'specialist' &&
+      selectedOrchestrator?.allowedAgents?.includes(a.id)
+    ),
+    [agents, selectedOrchestrator]
   );
 
   useEffect(() => {
@@ -48,51 +61,91 @@ export const Chat: React.FC = () => {
 
   const sendMessage = async () => {
     if (!selectedOrchestrator || !input.trim() || sending) return;
-    const client = createOpenRouterClient(apiConfig);
-    if (!client) {
-      setError('Configure sua chave do OpenRouter antes de enviar mensagens.');
-      return;
-    }
 
     setError(null);
     setSending(true);
+    setLastRunId(null);
 
-    const nextMessages: ChatMessage[] = [
-      ...messages,
-      { role: 'user', content: input.trim() },
-    ];
-    setMessages(nextMessages);
+    const userInput = input.trim();
     setInput('');
 
-    const systemPrompt = selectedOrchestrator.systemPrompt?.trim();
-    const payloadMessages = [
-      ...(systemPrompt ? [{ role: 'system', content: systemPrompt } as ChatMessage] : []),
-      ...nextMessages,
+    // Add user message
+    const nextMessages: ChatMessage[] = [
+      ...messages,
+      { role: 'user', content: userInput },
     ];
+    setMessages(nextMessages);
 
-    try {
-      const response = await client.chat({
-        model: selectedOrchestrator.model || 'gpt-4o',
-        messages: payloadMessages,
-        temperature: selectedOrchestrator.temperature ?? 0.7,
-      });
-      const assistantMessage = response.choices[0]?.message?.content || 'Sem resposta do modelo.';
-      setMessages(prev => [...prev, { role: 'assistant', content: assistantMessage }]);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro ao chamar o OpenRouter.';
-      setError(message);
-      setMessages(prev => [
-        ...prev,
-        { role: 'assistant', content: 'Não consegui responder. Tente novamente.' },
-      ]);
-    } finally {
-      setSending(false);
+    if (mode === 'execute') {
+      // Execute full orchestration
+      try {
+        const result = await executeOrchestration(selectedId, userInput);
+
+        if (result) {
+          setLastRunId(result.id);
+
+          // Add assistant message with result summary
+          const outputSummary = result.consolidatedOutput ||
+            (result.steps?.length ? `Executado ${result.steps.length} step(s)` : 'Execução iniciada');
+
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `✅ Orquestração concluída!\n\n${outputSummary}\n\n📋 Ver detalhes em Execuções`
+          }]);
+        } else {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: '❌ Falha na execução. Verifique a configuração da API e dos agentes.'
+          }]);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Erro na execução';
+        setError(message);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `❌ Erro: ${message}`
+        }]);
+      }
+    } else {
+      // Simple chat mode
+      const client = createOpenRouterClient(apiConfig);
+      if (!client) {
+        setError('Configure sua chave do OpenRouter antes de enviar mensagens.');
+        setSending(false);
+        return;
+      }
+
+      const systemPrompt = selectedOrchestrator.systemPrompt?.trim();
+      const payloadMessages = [
+        ...(systemPrompt ? [{ role: 'system', content: systemPrompt } as ChatMessage] : []),
+        ...nextMessages,
+      ];
+
+      try {
+        const response = await client.chat({
+          model: selectedOrchestrator.model || 'gpt-4o',
+          messages: payloadMessages,
+          temperature: selectedOrchestrator.temperature ?? 0.7,
+        });
+        const assistantMessage = response.choices[0]?.message?.content || 'Sem resposta do modelo.';
+        setMessages(prev => [...prev, { role: 'assistant', content: assistantMessage }]);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Erro ao chamar o OpenRouter.';
+        setError(message);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'Não consegui responder. Tente novamente.'
+        }]);
+      }
     }
+
+    setSending(false);
   };
 
   const clearChat = () => {
     if (!selectedId) return;
     setMessages([]);
+    setLastRunId(null);
     try {
       localStorage.removeItem(getChatStorageKey(selectedId));
     } catch {}
@@ -122,44 +175,108 @@ export const Chat: React.FC = () => {
         <div>
           <h1 className="text-xl font-semibold">Chat com Orquestrador</h1>
           <p className="text-sm text-neutral-500">
-            Converse diretamente com o orquestrador para testar o fluxo completo.
+            {mode === 'execute'
+              ? 'Executa o fluxo completo com especialistas'
+              : 'Conversa direta com o orquestrador'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={clearChat}
-          className="inline-flex items-center gap-2 px-3 py-2 text-sm text-neutral-300 border border-neutral-800 rounded hover:bg-neutral-900"
-        >
-          <Trash2 size={14} />
-          Limpar conversa
-        </button>
+        <div className="flex items-center gap-2">
+          {lastRunId && (
+            <button
+              onClick={() => navigate('/runs')}
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm text-green-400 border border-green-500/30 rounded hover:bg-green-500/10"
+            >
+              Ver Execução
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={clearChat}
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm text-neutral-300 border border-neutral-800 rounded hover:bg-neutral-900"
+          >
+            <Trash2 size={14} />
+            Limpar
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
-        <div className="space-y-3">
-          <label className="text-xs uppercase text-neutral-500">Orquestrador ativo</label>
-          <select
-            value={selectedId}
-            onChange={(event) => setSelectedId(event.target.value)}
-            className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-neutral-700"
-          >
-            {orchestrators.map(orchestrator => (
-              <option key={orchestrator.id} value={orchestrator.id}>
-                {orchestrator.name}
-              </option>
-            ))}
-          </select>
+        <div className="space-y-4">
+          {/* Mode Toggle */}
+          <div>
+            <label className="text-xs uppercase text-neutral-500 mb-2 block">Modo</label>
+            <div className="grid grid-cols-2 gap-1 p-1 bg-neutral-900 rounded-lg">
+              <button
+                onClick={() => setMode('execute')}
+                className={`flex items-center justify-center gap-2 px-3 py-2 rounded text-xs font-medium transition-colors ${
+                  mode === 'execute'
+                    ? 'bg-white text-black'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                <Play size={12} />
+                Executar
+              </button>
+              <button
+                onClick={() => setMode('chat')}
+                className={`flex items-center justify-center gap-2 px-3 py-2 rounded text-xs font-medium transition-colors ${
+                  mode === 'chat'
+                    ? 'bg-white text-black'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                <MessageSquare size={12} />
+                Chat
+              </button>
+            </div>
+          </div>
+
+          {/* Orchestrator Select */}
+          <div>
+            <label className="text-xs uppercase text-neutral-500 mb-2 block">Orquestrador</label>
+            <select
+              value={selectedId}
+              onChange={(event) => setSelectedId(event.target.value)}
+              className="w-full bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-neutral-700"
+            >
+              {orchestrators.map(orchestrator => (
+                <option key={orchestrator.id} value={orchestrator.id}>
+                  {orchestrator.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {selectedOrchestrator && (
             <div className="p-3 bg-neutral-900 rounded text-xs text-neutral-400 space-y-2">
               <div>
                 <p className="text-neutral-500 mb-1">Modelo</p>
-                <p className="text-sm text-neutral-200">{selectedOrchestrator.model}</p>
+                <p className="text-sm text-neutral-200 font-mono truncate">{selectedOrchestrator.model}</p>
               </div>
               <div>
                 <p className="text-neutral-500 mb-1">Role</p>
                 <p className="text-sm text-neutral-200">{selectedOrchestrator.role}</p>
               </div>
+              {mode === 'execute' && specialists.length > 0 && (
+                <div>
+                  <p className="text-neutral-500 mb-1">Especialistas ({specialists.length})</p>
+                  <div className="space-y-1">
+                    {specialists.map(s => (
+                      <p key={s.id} className="text-xs text-neutral-300">• {s.name}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {mode === 'execute' && specialists.length === 0 && (
+                <div className="p-2 rounded bg-amber-500/10 border border-amber-500/20">
+                  <p className="text-amber-300 text-xs">
+                    Nenhum especialista configurado.{' '}
+                    <Link to={`/agents/${selectedOrchestrator.id}`} className="underline">
+                      Editar
+                    </Link>
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -177,7 +294,9 @@ export const Chat: React.FC = () => {
           <div className="flex-1 min-h-[360px] p-4 space-y-4 overflow-y-auto bg-neutral-950">
             {messages.length === 0 && (
               <div className="text-sm text-neutral-500">
-                Envie uma mensagem para iniciar a conversa com o orquestrador.
+                {mode === 'execute'
+                  ? 'Envie uma tarefa para executar o fluxo completo com os especialistas.'
+                  : 'Envie uma mensagem para conversar com o orquestrador.'}
               </div>
             )}
             {messages.map((message, index) => (
@@ -205,6 +324,14 @@ export const Chat: React.FC = () => {
                 </div>
               </div>
             ))}
+            {sending && (
+              <div className="flex justify-start">
+                <div className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm flex items-center gap-2">
+                  <Loader2 size={14} className="animate-spin" />
+                  {mode === 'execute' ? 'Executando orquestração...' : 'Processando...'}
+                </div>
+              </div>
+            )}
           </div>
 
           {error && (
@@ -217,18 +344,28 @@ export const Chat: React.FC = () => {
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder="Digite sua mensagem..."
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
+              placeholder={mode === 'execute' ? 'Descreva a tarefa...' : 'Digite sua mensagem...'}
               rows={2}
               className="flex-1 bg-neutral-900 border border-neutral-800 rounded px-3 py-2 text-sm resize-none focus:outline-none focus:border-neutral-700"
             />
             <button
               type="button"
               onClick={sendMessage}
-              disabled={!input.trim() || sending}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!input.trim() || sending || !apiConfig.openRouterKey}
+              className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed ${
+                mode === 'execute'
+                  ? 'bg-green-600 text-white hover:bg-green-700'
+                  : 'bg-white text-black hover:bg-neutral-200'
+              }`}
             >
-              <Send size={16} />
-              {sending ? 'Enviando...' : 'Enviar'}
+              {mode === 'execute' ? <Play size={16} /> : <Send size={16} />}
+              {sending ? 'Aguarde...' : mode === 'execute' ? 'Executar' : 'Enviar'}
             </button>
           </div>
         </div>
