@@ -95,6 +95,26 @@ const resolveInputMapping = (
   return resolved;
 };
 
+// === Image Model Detection ===
+const IMAGE_GENERATION_MODELS = [
+  'dall-e',
+  'stable-diffusion',
+  'sdxl',
+  'midjourney',
+  'imagen',
+  'ideogram',
+  'flux',
+  'playground',
+  'leonardo',
+  'black-forest-labs',
+  'stability',
+];
+
+const isImageGenerationModel = (modelId: string): boolean => {
+  const modelLower = modelId.toLowerCase();
+  return IMAGE_GENERATION_MODELS.some(m => modelLower.includes(m));
+};
+
 // === Specialist Executor ===
 export const executeSpecialist = async (
   agent: Agent,
@@ -102,6 +122,38 @@ export const executeSpecialist = async (
   client: OpenRouterClient
 ): Promise<AgentResponse> => {
   try {
+    // Check if this is an image generation model
+    if (isImageGenerationModel(agent.model)) {
+      // Extract prompt from input
+      const prompt = input.prompt || input.text || input.description ||
+        Object.values(input).find(v => typeof v === 'string') ||
+        JSON.stringify(input);
+
+      const imageResponse = await client.generateImage({
+        model: agent.model,
+        prompt: String(prompt),
+        size: (input.size as '1024x1024' | '1024x1792' | '1792x1024') || '1024x1024',
+        quality: (input.quality as 'standard' | 'hd') || 'standard',
+        style: (input.style as 'natural' | 'vivid') || 'vivid',
+      });
+
+      // Return image URLs
+      const imageUrls = imageResponse.data
+        .map(d => d.url || d.b64_json)
+        .filter(Boolean);
+
+      return {
+        success: true,
+        output: {
+          images: imageUrls,
+          image_url: imageUrls[0] || null,
+          prompt: prompt,
+          revised_prompt: imageResponse.data[0]?.revised_prompt,
+        },
+      };
+    }
+
+    // Regular text model execution
     // Build system prompt with output schema
     const systemPrompt = buildSystemPrompt(
       agent.role,
