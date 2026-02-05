@@ -712,12 +712,11 @@ export const executeRun = async (
     throw new Error('Orchestrator not found');
   }
 
-  // Filter specialists that are allowed by the orchestrator
-  // Ensure consistent string comparison for IDs
+  // Get specialists in the order they were selected (preserves execution order)
   const allowedIds = (orchestrator.allowedAgents || []).map(id => String(id));
-  const availableAgents = agents.filter(
-    a => a.type === 'specialist' && allowedIds.includes(String(a.id))
-  );
+  const availableAgents = allowedIds
+    .map(id => agents.find(a => a.type === 'specialist' && String(a.id) === id))
+    .filter((a): a is Agent => a !== undefined);
 
   // Log available specialists for debugging
   console.log('[Executor] Orchestrator:', orchestrator.name, 'ID:', orchestrator.id);
