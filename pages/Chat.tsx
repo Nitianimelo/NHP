@@ -2,15 +2,111 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createOpenRouterClient, ChatMessage } from '../lib/openrouter';
 import { useApp } from '../AppContext';
-import { Bot, Send, Trash2, Play, MessageSquare, Loader2 } from 'lucide-react';
+import { RunLog, Step } from '../types';
+import { Bot, Send, Trash2, Play, MessageSquare, Loader2, CheckCircle, XCircle, Clock, SkipForward, Activity } from 'lucide-react';
 
 const getChatStorageKey = (orchestratorId: string) => `nhp_orchestrator_chat_${orchestratorId}`;
 
 type ChatMode = 'chat' | 'execute';
 
+// === Execution Panel Components ===
+const StepStatusIcon: React.FC<{ status: Step['status'] }> = ({ status }) => {
+  switch (status) {
+    case 'completed':
+      return <CheckCircle size={12} className="text-green-500" />;
+    case 'failed':
+      return <XCircle size={12} className="text-red-500" />;
+    case 'running':
+      return <Loader2 size={12} className="text-blue-500 animate-spin" />;
+    case 'skipped':
+      return <SkipForward size={12} className="text-neutral-500" />;
+    default:
+      return <Clock size={12} className="text-neutral-500" />;
+  }
+};
+
+const ExecutionPanel: React.FC<{ logs: RunLog[]; steps: Step[] }> = ({ logs, steps }) => {
+  const recentLogs = logs.slice(-15);
+
+  return (
+    <div className="border border-neutral-800 rounded-lg overflow-hidden bg-neutral-950">
+      <div className="px-3 py-2 border-b border-neutral-800 flex items-center gap-2">
+        <Activity size={14} className="text-green-500" />
+        <span className="text-xs font-medium text-neutral-300">Execução em Tempo Real</span>
+        {steps.length > 0 && (
+          <span className="ml-auto text-xs text-neutral-500">
+            {steps.filter(s => s.status === 'completed').length}/{steps.length} steps
+          </span>
+        )}
+      </div>
+
+      {/* Steps Progress */}
+      {steps.length > 0 && (
+        <div className="px-3 py-2 border-b border-neutral-800 flex flex-wrap gap-2">
+          {steps.map((step, i) => (
+            <div
+              key={step.id}
+              className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs ${
+                step.status === 'completed' ? 'bg-green-500/10 text-green-400' :
+                step.status === 'failed' ? 'bg-red-500/10 text-red-400' :
+                step.status === 'running' ? 'bg-blue-500/10 text-blue-400' :
+                'bg-neutral-800 text-neutral-500'
+              }`}
+            >
+              <StepStatusIcon status={step.status} />
+              <span className="truncate max-w-[100px]">{step.agentName || `Step ${i + 1}`}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Logs */}
+      <div className="max-h-48 overflow-y-auto">
+        {recentLogs.length === 0 ? (
+          <div className="px-3 py-4 text-center text-xs text-neutral-600">
+            Aguardando execução...
+          </div>
+        ) : (
+          <div className="divide-y divide-neutral-800/50">
+            {recentLogs.map(log => (
+              <div key={log.id} className="px-3 py-2 flex gap-2">
+                <span className="text-[10px] text-neutral-600 font-mono w-12 shrink-0">
+                  {log.timestamp.split('T').pop()?.slice(0, 8)}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-medium text-neutral-400">{log.agentName}</span>
+                    <span className={`text-[10px] px-1 rounded ${
+                      log.phase === 'PLANNING' ? 'bg-purple-500/20 text-purple-400' :
+                      log.phase === 'DELEGATION' ? 'bg-blue-500/20 text-blue-400' :
+                      log.phase === 'PROCESS' ? 'bg-yellow-500/20 text-yellow-400' :
+                      log.phase === 'OUTPUT' ? 'bg-green-500/20 text-green-400' :
+                      'bg-neutral-800 text-neutral-500'
+                    }`}>
+                      {log.phase}
+                    </span>
+                  </div>
+                  <p className={`text-xs mt-0.5 ${
+                    log.level === 'error' ? 'text-red-400' :
+                    log.level === 'success' ? 'text-green-400' :
+                    log.level === 'warn' ? 'text-yellow-400' :
+                    'text-neutral-400'
+                  }`}>
+                    {log.message}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const Chat: React.FC = () => {
   const navigate = useNavigate();
-  const { agents, apiConfig, executeOrchestration } = useApp();
+  const { agents, apiConfig, executeOrchestration, runs } = useApp();
   const orchestrators = useMemo(
     () => agents.filter(agent => agent.type === 'orchestrator'),
     [agents]
@@ -22,6 +118,22 @@ export const Chat: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<ChatMode>('execute');
   const [lastRunId, setLastRunId] = useState<string | null>(null);
+
+  // Get current run for live updates
+  // During execution (sending=true), show the most recent run for this orchestrator
+  const currentRun = useMemo(() => {
+    if (lastRunId) {
+      return runs.find(r => r.id === lastRunId);
+    }
+    // While sending in execute mode, find the most recent running/pending run
+    if (sending && mode === 'execute') {
+      return runs.find(r =>
+        r.orchestratorId === selectedId &&
+        (r.status === 'running' || r.status === 'pending')
+      );
+    }
+    return null;
+  }, [runs, lastRunId, sending, mode, selectedId]);
 
   useEffect(() => {
     if (!selectedId && orchestrators.length > 0) {
@@ -369,6 +481,14 @@ export const Chat: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Execution Panel - shows during and after execution */}
+        {mode === 'execute' && (sending || currentRun) && (
+          <ExecutionPanel
+            logs={currentRun?.logs || []}
+            steps={currentRun?.steps || []}
+          />
+        )}
       </div>
     </div>
   );

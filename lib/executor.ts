@@ -484,6 +484,28 @@ REGRA CRÍTICA: O campo "agentId" DEVE ser um dos IDs listados acima: ${agentIdL
     strategy: planData.strategy || 'sequential',
   };
 
+  // Validate and clean up dependencies
+  const validStepIds = new Set(plan.steps.map(s => s.stepId));
+  plan.steps.forEach((step, index) => {
+    // Remove invalid dependencies (IDs that don't exist)
+    step.dependsOn = step.dependsOn.filter(depId => validStepIds.has(depId));
+
+    // First step should never have dependencies
+    if (index === 0) {
+      step.dependsOn = [];
+    }
+
+    // Remove self-references
+    step.dependsOn = step.dependsOn.filter(depId => depId !== step.stepId);
+  });
+
+  console.log('[Executor] Plan created with steps:', plan.steps.map(s => ({
+    stepId: s.stepId,
+    agentId: s.agentId,
+    agentName: s.agentName,
+    dependsOn: s.dependsOn
+  })));
+
   return plan;
 };
 
@@ -825,15 +847,29 @@ export const executeRun = async (
       onLog(createLog(orchestrator.name, 'Executando em modo sequencial', 'PROCESS', 'info'));
 
       for (const planStep of plan.steps) {
-        // Check dependencies
-        const dependenciesMet = planStep.dependsOn.every(depId => completedStepIds.has(depId));
+        // Check dependencies - but be lenient for sequential execution
+        // If previous step completed, we can proceed even if specific dependency not met
+        const dependenciesMet = planStep.dependsOn.length === 0 ||
+          planStep.dependsOn.every(depId => completedStepIds.has(depId));
 
-        if (!dependenciesMet) {
+        // For sequential, if previous step completed, allow this one to run
+        const previousStepIndex = plan.steps.indexOf(planStep) - 1;
+        const previousCompleted = previousStepIndex < 0 ||
+          completedStepIds.has(plan.steps[previousStepIndex].stepId);
+
+        if (!dependenciesMet && !previousCompleted) {
           const step = steps.find(s => s.id === planStep.stepId)!;
           step.status = 'skipped';
           step.error = 'Dependências não satisfeitas';
           failedStepIds.add(step.id);
           onStepUpdate(step);
+          onLog(createLog(
+            orchestrator.name,
+            `Step ${planStep.stepId} pulado: dependências ${planStep.dependsOn.join(', ')} não satisfeitas`,
+            'DELEGATION',
+            'warn',
+            step.id
+          ));
           continue;
         }
 
