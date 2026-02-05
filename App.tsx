@@ -9,6 +9,7 @@ import { Runs } from './pages/Runs';
 import { Knowledge } from './pages/Knowledge';
 import { Api } from './pages/Api';
 import { Chat } from './pages/Chat';
+import { Preview } from './pages/Preview';
 
 const SettingsPlaceholder = () => <div className="text-white">Página de Configurações (Mock)</div>;
 
@@ -28,6 +29,7 @@ const App = () => {
             <Route path="/agents/:id" element={<AgentEditor />} />
 
             <Route path="/runs" element={<Runs />} />
+            <Route path="/preview" element={<Preview />} />
             <Route path="/knowledge" element={<Knowledge />} />
             <Route path="/api" element={<Api />} />
             <Route path="/settings" element={<SettingsPlaceholder />} />
