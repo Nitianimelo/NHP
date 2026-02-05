@@ -86,25 +86,31 @@ const StepCard: React.FC<{ step: Step; index: number }> = ({ step, index }) => {
 
       {expanded && (
         <div className="border-t border-neutral-800 p-3 space-y-3 bg-neutral-950">
-          {/* Input */}
-          {step.input && Object.keys(step.input).length > 0 && (
-            <div>
-              <p className="text-xs text-neutral-500 mb-1">Input</p>
-              <pre className="text-xs bg-neutral-900 p-2 rounded overflow-x-auto font-mono text-neutral-300">
-                {JSON.stringify(step.input, null, 2)}
-              </pre>
-            </div>
-          )}
+          {/* Input recebido */}
+          <div>
+            <p className="text-xs text-blue-400 mb-1 font-medium flex items-center gap-1">
+              <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+              INPUT RECEBIDO
+            </p>
+            <pre className="text-xs bg-blue-500/5 border border-blue-500/20 p-2 rounded overflow-x-auto font-mono text-neutral-300">
+              {step.input && Object.keys(step.input).length > 0
+                ? JSON.stringify(step.input, null, 2)
+                : '(nenhum input)'}
+            </pre>
+          </div>
 
-          {/* Output */}
-          {step.output && (
-            <div>
-              <p className="text-xs text-neutral-500 mb-1">Output</p>
-              <pre className="text-xs bg-neutral-900 p-2 rounded overflow-x-auto font-mono text-neutral-300">
-                {JSON.stringify(step.output, null, 2)}
-              </pre>
-            </div>
-          )}
+          {/* Output gerado */}
+          <div>
+            <p className="text-xs text-green-400 mb-1 font-medium flex items-center gap-1">
+              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+              OUTPUT GERADO
+            </p>
+            <pre className="text-xs bg-green-500/5 border border-green-500/20 p-2 rounded overflow-x-auto font-mono text-neutral-300 max-h-64 overflow-y-auto">
+              {step.output
+                ? JSON.stringify(step.output, null, 2)
+                : '(nenhum output)'}
+            </pre>
+          </div>
 
           {/* Image Preview */}
           {imageUrls.length > 0 && (
@@ -136,7 +142,8 @@ const StepCard: React.FC<{ step: Step; index: number }> = ({ step, index }) => {
           {/* Error */}
           {step.error && (
             <div className="p-2 rounded bg-red-500/10 border border-red-500/20">
-              <p className="text-xs text-red-400">{step.error}</p>
+              <p className="text-xs text-red-400 font-medium">ERRO:</p>
+              <p className="text-xs text-red-300">{step.error}</p>
             </div>
           )}
         </div>
@@ -177,6 +184,38 @@ const LogItem: React.FC<{ log: RunLog }> = ({ log }) => {
             </pre>
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+// Flow visualization showing data passing between agents
+const FlowDiagram: React.FC<{ steps: Step[] }> = ({ steps }) => {
+  if (!steps || steps.length === 0) return null;
+
+  return (
+    <div className="p-4 border-b border-neutral-800 bg-neutral-900/30">
+      <p className="text-xs text-neutral-500 mb-3 uppercase font-medium">Fluxo de Dados entre Agentes</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="px-2 py-1 bg-purple-500/20 text-purple-300 rounded text-xs">
+          USER INPUT
+        </div>
+        {steps.map((step, i) => (
+          <React.Fragment key={step.id}>
+            <span className="text-neutral-600">→</span>
+            <div className={`px-2 py-1 rounded text-xs ${
+              step.status === 'completed' ? 'bg-green-500/20 text-green-300' :
+              step.status === 'failed' ? 'bg-red-500/20 text-red-300' :
+              'bg-neutral-800 text-neutral-400'
+            }`}>
+              {step.agentName}
+            </div>
+          </React.Fragment>
+        ))}
+        <span className="text-neutral-600">→</span>
+        <div className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded text-xs">
+          RESULTADO
+        </div>
       </div>
     </div>
   );
@@ -231,6 +270,9 @@ const RunCard: React.FC<{ run: Run }> = ({ run }) => {
 
       {expanded && (
         <div className="border-t border-neutral-800">
+          {/* Flow Diagram */}
+          <FlowDiagram steps={run.steps || []} />
+
           {/* Resultado Final */}
           {(run.finalResult || run.consolidatedOutput) && (
             <div className="p-4 border-b border-neutral-800">
