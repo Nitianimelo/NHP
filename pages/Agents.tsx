@@ -527,8 +527,28 @@ export const AgentEditor: React.FC = () => {
               </span>
             </label>
             <p className="text-xs text-neutral-500 mb-3">
-              Selecione quais especialistas este orquestrador pode coordenar
+              {modoExecucao === 'sequencial'
+                ? 'A ordem de seleção define a ordem de execução (1º → 2º → 3º...)'
+                : 'Selecione quais especialistas este orquestrador pode usar'}
             </p>
+
+            {/* Ordem atual */}
+            {especialistas.length > 0 && modoExecucao === 'sequencial' && (
+              <div className="mb-3 p-2 bg-purple-500/10 border border-purple-500/20 rounded">
+                <p className="text-xs text-purple-300 mb-1">Ordem de execução:</p>
+                <div className="flex flex-wrap gap-1">
+                  {especialistas.map((id, i) => {
+                    const spec = allAgents.find(a => String(a.id) === id);
+                    return (
+                      <span key={id} className="text-xs bg-purple-500/20 text-purple-200 px-2 py-0.5 rounded">
+                        {i + 1}. {spec?.nome || id}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {availableSpecialists.length === 0 ? (
               <div className="p-4 rounded border border-dashed border-neutral-800 text-center">
                 <p className="text-sm text-neutral-500 mb-2">Nenhum especialista disponivel</p>
@@ -543,6 +563,7 @@ export const AgentEditor: React.FC = () => {
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {availableSpecialists.map(spec => {
                   const isSelected = especialistas.includes(String(spec.id));
+                  const orderIndex = especialistas.indexOf(String(spec.id));
                   return (
                     <label
                       key={spec.id}
@@ -558,6 +579,11 @@ export const AgentEditor: React.FC = () => {
                         onChange={() => toggleSpecialist(spec.id!)}
                         className="rounded accent-blue-500"
                       />
+                      {isSelected && modoExecucao === 'sequencial' && (
+                        <span className="w-6 h-6 flex items-center justify-center bg-purple-500 text-white text-xs font-bold rounded-full">
+                          {orderIndex + 1}
+                        </span>
+                      )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <Bot size={14} className="text-blue-400 shrink-0" />
