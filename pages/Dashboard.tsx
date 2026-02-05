@@ -13,7 +13,7 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="max-w-4xl">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
+        <h1 className="text-xl font-semibold">Nini Hub Paradise</h1>
         <Link
           to="/agents/new"
           className="flex items-center gap-2 px-3 py-2 bg-white text-black text-sm font-medium rounded hover:bg-neutral-200"
