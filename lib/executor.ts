@@ -434,17 +434,31 @@ The JSON must have this exact structure:
     if (!planData.steps || !Array.isArray(planData.steps)) {
       throw new Error('Orchestrator plan missing steps array');
     }
+
+    // Normalize step data
+    planData.steps = planData.steps.map((s: Record<string, unknown>) => ({
+      ...s,
+      stepId: String(s.stepId || ''),
+      agentId: String(s.agentId || ''),
+      description: String(s.description || ''),
+      inputMapping: (s.inputMapping && typeof s.inputMapping === 'object')
+        ? s.inputMapping as Record<string, string>
+        : {} as Record<string, string>,
+      dependsOn: Array.isArray(s.dependsOn) ? s.dependsOn.map(String) : [],
+    }));
   }
 
   const plan: ExecutionPlan = {
     goal,
     reasoning: planData.reasoning || 'No reasoning provided',
     steps: planData.steps.map((s, i) => {
-      const agent = availableAgents.find(a => a.id === s.agentId);
+      // Normalize agentId to string for consistent comparison
+      const normalizedAgentId = String(s.agentId);
+      const agent = availableAgents.find(a => a.id === normalizedAgentId);
       return {
         stepId: s.stepId || `step${i + 1}`,
-        agentId: s.agentId,
-        agentName: agent?.name || s.agentId,
+        agentId: normalizedAgentId,
+        agentName: agent?.name || normalizedAgentId,
         description: s.description || '',
         inputMapping: s.inputMapping || {},
         dependsOn: s.dependsOn || [],
@@ -557,8 +571,11 @@ export const executeRun = async (
     throw new Error('Orchestrator not found');
   }
 
+  // Filter specialists that are allowed by the orchestrator
+  // Ensure consistent string comparison for IDs
+  const allowedIds = (orchestrator.allowedAgents || []).map(id => String(id));
   const availableAgents = agents.filter(
-    a => a.type === 'specialist' && orchestrator.allowedAgents?.includes(a.id)
+    a => a.type === 'specialist' && allowedIds.includes(String(a.id))
   );
 
   // Update run status
@@ -617,11 +634,13 @@ export const executeRun = async (
     // Execute a single step
     const executeStep = async (planStep: PlanStep): Promise<void> => {
       const step = steps.find(s => s.id === planStep.stepId)!;
-      const agent = agents.find(a => a.id === planStep.agentId);
+      // Normalize agentId to string for consistent comparison
+      const normalizedAgentId = String(planStep.agentId);
+      const agent = agents.find(a => a.id === normalizedAgentId);
 
       if (!agent) {
         step.status = 'failed';
-        step.error = `Agent ${planStep.agentId} not found`;
+        step.error = `Agent ${normalizedAgentId} not found`;
         failedStepIds.add(step.id);
         onStepUpdate(step);
         return;
