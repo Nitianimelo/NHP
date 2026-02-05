@@ -104,3 +104,92 @@ export async function deleteSharedPageFromSupabase(shareId: string): Promise<boo
 
   return !delError;
 }
+
+// =====================================================
+// Agent CRUD — table: agentnhp
+// Columns: id (auto), nome, modelo, system, tipo, temperatura
+// =====================================================
+
+export interface SupabaseAgent {
+  id?: number;
+  nome: string;
+  modelo: string;
+  system: string;
+  tipo: string;
+  temperatura: number;
+}
+
+/** List all agents from Supabase */
+export async function listAgents(): Promise<SupabaseAgent[]> {
+  const { data, error } = await supabaseAdmin
+    .from('agentnhp')
+    .select('*')
+    .order('id', { ascending: false });
+
+  if (error) {
+    console.error('[Supabase] listAgents error:', error.message);
+    return [];
+  }
+  return data || [];
+}
+
+/** Get a single agent by ID */
+export async function getAgent(id: number): Promise<SupabaseAgent | null> {
+  const { data, error } = await supabaseAdmin
+    .from('agentnhp')
+    .select('*')
+    .eq('id', id)
+    .limit(1)
+    .single();
+
+  if (error) {
+    console.error('[Supabase] getAgent error:', error.message);
+    return null;
+  }
+  return data;
+}
+
+/** Create a new agent */
+export async function createAgent(agent: Omit<SupabaseAgent, 'id'>): Promise<SupabaseAgent | null> {
+  const { data, error } = await supabaseAdmin
+    .from('agentnhp')
+    .insert(agent)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[Supabase] createAgent error:', error.message);
+    return null;
+  }
+  return data;
+}
+
+/** Update an existing agent */
+export async function updateAgentInSupabase(id: number, agent: Partial<Omit<SupabaseAgent, 'id'>>): Promise<SupabaseAgent | null> {
+  const { data, error } = await supabaseAdmin
+    .from('agentnhp')
+    .update(agent)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[Supabase] updateAgent error:', error.message);
+    return null;
+  }
+  return data;
+}
+
+/** Delete an agent */
+export async function deleteAgentFromSupabase(id: number): Promise<boolean> {
+  const { error } = await supabaseAdmin
+    .from('agentnhp')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('[Supabase] deleteAgent error:', error.message);
+    return false;
+  }
+  return true;
+}
