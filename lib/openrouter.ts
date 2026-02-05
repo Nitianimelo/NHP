@@ -433,15 +433,15 @@ Respond with a JSON execution plan.`;
 };
 
 // === Schema for Orchestrator Planning ===
+// Note: Using non-strict mode to allow flexible LLM responses
 export const ORCHESTRATOR_PLAN_SCHEMA: JsonSchema = {
   name: 'execution_plan',
-  strict: true,
+  strict: false,
   schema: {
     type: 'object',
     properties: {
       reasoning: {
         type: 'string',
-        description: 'Brief explanation of the plan',
       },
       steps: {
         type: 'array',
@@ -453,14 +453,13 @@ export const ORCHESTRATOR_PLAN_SCHEMA: JsonSchema = {
             description: { type: 'string' },
             inputMapping: {
               type: 'object',
-              additionalProperties: { type: 'string' },
             },
             dependsOn: {
               type: 'array',
               items: { type: 'string' },
             },
           },
-          required: ['stepId', 'agentId', 'description', 'inputMapping', 'dependsOn'],
+          required: ['stepId', 'agentId', 'description'],
         },
       },
       strategy: {
@@ -468,7 +467,6 @@ export const ORCHESTRATOR_PLAN_SCHEMA: JsonSchema = {
         enum: ['sequential', 'parallel', 'mixed'],
       },
     },
-    required: ['reasoning', 'steps', 'strategy'],
-    additionalProperties: false,
+    required: ['steps'],
   },
 };
