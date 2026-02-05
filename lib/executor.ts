@@ -667,28 +667,49 @@ export const executeRun = async (
     throw new Error('Nenhum especialista disponível. Configure especialistas no orquestrador.');
   }
 
+  // Get execution mode from orchestrator config
+  const executionMode = orchestrator.orchestrationConfig?.executionMode || 'sequencial';
+
   onLog(createLog(
     orchestrator.name,
-    `${availableAgents.length} especialista(s) disponível(is): ${availableAgents.map(a => a.name).join(', ')}`,
+    `${availableAgents.length} especialista(s) disponível(is): ${availableAgents.map(a => a.name).join(', ')} | Modo: ${executionMode}`,
     'PLANNING',
     'info'
   ));
 
   try {
-    // Step 1: Create execution plan
-    onLog(createLog(orchestrator.name, 'Criando plano de execução...', 'PLANNING', 'info'));
+    let plan: ExecutionPlan;
 
-    const plan = await createExecutionPlan(
-      orchestrator,
-      run.goal,
-      availableAgents,
-      client,
-      run.context
-    );
+    // Create plan based on execution mode
+    if (executionMode === 'llm') {
+      // LLM decides the order
+      onLog(createLog(orchestrator.name, 'LLM criando plano de execução...', 'PLANNING', 'info'));
+      plan = await createExecutionPlan(orchestrator, run.goal, availableAgents, client, run.context);
+    } else {
+      // For sequencial/paralelo, use the order of allowedAgents
+      onLog(createLog(orchestrator.name, `Usando modo ${executionMode}...`, 'PLANNING', 'info'));
+      plan = {
+        goal: run.goal,
+        reasoning: executionMode === 'paralelo'
+          ? 'Executando todos especialistas em paralelo'
+          : 'Executando especialistas em cadeia sequencial',
+        steps: availableAgents.map((agent, i) => ({
+          stepId: `step${i + 1}`,
+          agentId: agent.id,
+          agentName: agent.name,
+          description: `Executar ${agent.name}`,
+          inputMapping: {},
+          dependsOn: executionMode === 'sequencial' && i > 0 ? [`step${i}`] : [],
+          priority: i,
+        })),
+        estimatedSteps: availableAgents.length,
+        strategy: executionMode === 'paralelo' ? 'parallel' : 'sequential',
+      };
+    }
 
     onLog(createLog(
       orchestrator.name,
-      `Plano criado: ${plan.reasoning} (estratégia: ${plan.strategy})`,
+      `Plano criado: ${plan.reasoning} (${plan.steps.length} steps)`,
       'PLANNING',
       'success',
       undefined,

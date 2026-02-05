@@ -41,11 +41,14 @@ export interface AgentAction {
 }
 
 // === Orchestration Config ===
+export type ExecutionMode = 'llm' | 'paralelo' | 'sequencial';
+
 export interface OrchestrationConfig {
   maxSteps: number;
   planningStrategy: 'sequential' | 'parallel' | 'dynamic';
   evaluationMode: 'none' | 'basic' | 'critic_loop';
   consolidationStrategy: 'concatenate' | 'summarize' | 'best_of_n';
+  executionMode: ExecutionMode;
   // For dynamic planning
   allowReplanning: boolean;
   maxRetries: number;
