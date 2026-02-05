@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { useApp } from '../AppContext';
 import { ModelSelector } from '../components/ModelSelector';
 import {
   Plus,
@@ -93,6 +94,7 @@ const AgentCard: React.FC<{
 
 // === Agents List ===
 export const AgentsList: React.FC = () => {
+  const { refreshAgents: refreshContext } = useApp();
   const [agents, setAgents] = useState<SupabaseAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -122,11 +124,12 @@ export const AgentsList: React.FC = () => {
     const ok = await deleteAgentFromSupabase(id);
     if (ok) {
       setAgents(prev => prev.filter(a => a.id !== id));
+      refreshContext();
     } else {
       alert('Erro ao excluir agente');
     }
     setDeleting(null);
-  }, []);
+  }, [refreshContext]);
 
   const filteredAgents = agents.filter(agent => {
     const matchesSearch = agent.nome.toLowerCase().includes(search.toLowerCase()) ||
@@ -226,6 +229,7 @@ export const AgentsList: React.FC = () => {
 export const AgentEditor: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { refreshAgents } = useApp();
   const isNew = !id || id === 'new';
   const numericId = isNew ? null : parseInt(id, 10);
 
@@ -278,6 +282,7 @@ export const AgentEditor: React.FC = () => {
     if (isNew) {
       const created = await createAgent(agentData);
       if (created) {
+        await refreshAgents();
         navigate('/agents');
       } else {
         setError('Erro ao criar agente no Supabase. Verifique se a tabela agentnhp existe.');
@@ -285,6 +290,7 @@ export const AgentEditor: React.FC = () => {
     } else if (numericId != null) {
       const updated = await updateAgentInSupabase(numericId, agentData);
       if (updated) {
+        await refreshAgents();
         navigate('/agents');
       } else {
         setError('Erro ao atualizar agente no Supabase');
@@ -301,6 +307,7 @@ export const AgentEditor: React.FC = () => {
     setDeleting(true);
     const ok = await deleteAgentFromSupabase(numericId);
     if (ok) {
+      await refreshAgents();
       navigate('/agents');
     } else {
       setError('Erro ao excluir agente');
