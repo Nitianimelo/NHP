@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { MOCK_KBS, MOCK_WORKFLOWS } from './mockData';
-import { Agent, Run, RunLog, Step, KnowledgeBase, Workflow, AgentType } from './types';
+import { Agent, Run, RunLog, Step, KnowledgeBase, Workflow, AgentType, ExecutionMode } from './types';
 import { OpenRouterClient } from './lib/openrouter';
 import { executeRun as executeRunEngine, createRun as createRunFactory } from './lib/executor';
 import { listAgents, SupabaseAgent } from './lib/supabase';
@@ -51,6 +51,15 @@ function mapSupabaseAgent(sa: SupabaseAgent): Agent {
     outputSchema: [],
     allowedActions: [],
     allowedAgents: sa.especialistas ? sa.especialistas.split(',').map(s => s.trim()).filter(Boolean) : [],
+    orchestrationConfig: agentType === 'orchestrator' ? {
+      maxSteps: 10,
+      planningStrategy: 'sequential',
+      evaluationMode: 'none',
+      consolidationStrategy: 'summarize',
+      executionMode: (sa.modo_execucao as ExecutionMode) || 'sequencial',
+      allowReplanning: false,
+      maxRetries: 3,
+    } : undefined,
     capabilities: {
       textGeneration: true,
       imageGeneration: false,

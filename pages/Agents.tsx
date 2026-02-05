@@ -245,6 +245,7 @@ export const AgentEditor: React.FC = () => {
   const [tipo, setTipo] = useState<string>('specialist');
   const [temperatura, setTemperatura] = useState(0.7);
   const [especialistas, setEspecialistas] = useState<string[]>([]);
+  const [modoExecucao, setModoExecucao] = useState<string>('sequencial');
   const [allAgents, setAllAgents] = useState<SupabaseAgent[]>([]);
 
   // Load all agents (for specialist selector)
@@ -277,6 +278,7 @@ export const AgentEditor: React.FC = () => {
         setEspecialistas(
           agent.especialistas ? agent.especialistas.split(',').map(s => s.trim()).filter(Boolean) : []
         );
+        setModoExecucao(agent.modo_execucao || 'sequencial');
       } else {
         setError('Agente nao encontrado');
       }
@@ -300,6 +302,7 @@ export const AgentEditor: React.FC = () => {
       tipo,
       temperatura,
       especialistas: tipo === 'orchestrator' ? especialistas.join(',') : '',
+      modo_execucao: tipo === 'orchestrator' ? modoExecucao : '',
     };
 
     if (isNew) {
@@ -477,6 +480,42 @@ export const AgentEditor: React.FC = () => {
             {system.length} caracteres
           </p>
         </div>
+
+        {/* Modo de Execução (only for orchestrators) */}
+        {tipo === 'orchestrator' && (
+          <div className="border-t border-neutral-800 pt-6">
+            <label className="block text-sm font-medium mb-3">Modo de Execução</label>
+            <div className="grid grid-cols-1 gap-2">
+              {[
+                { value: 'sequencial', label: 'Sequencial (Cadeia)', desc: 'Output de um → Input do próximo' },
+                { value: 'paralelo', label: 'Paralelo', desc: 'Todos rodam juntos → Orquestrador compila' },
+                { value: 'llm', label: 'LLM Define', desc: 'O orquestrador decide a ordem via prompt' },
+              ].map(m => (
+                <label
+                  key={m.value}
+                  className={`flex items-start gap-3 p-3 rounded cursor-pointer transition-colors ${
+                    modoExecucao === m.value
+                      ? 'bg-purple-500/10 border border-purple-500/30'
+                      : 'bg-neutral-900 border border-neutral-800 hover:border-neutral-700'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="modoExecucao"
+                    value={m.value}
+                    checked={modoExecucao === m.value}
+                    onChange={() => setModoExecucao(m.value)}
+                    className="mt-1 accent-purple-500"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-white">{m.label}</p>
+                    <p className="text-xs text-neutral-500">{m.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Especialistas (only for orchestrators) */}
         {tipo === 'orchestrator' && (

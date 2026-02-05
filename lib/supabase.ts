@@ -118,6 +118,7 @@ export interface SupabaseAgent {
   tipo: string;
   temperatura: number;
   especialistas?: string;
+  modo_execucao?: string; // 'llm' | 'paralelo' | 'sequencial'
 }
 
 /** List all agents from Supabase */

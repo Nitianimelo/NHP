@@ -573,14 +573,34 @@ const executeStepWithRetry = async (
       // Resolve inputs with accumulated context
       step.input = resolveInputMapping(planStep.inputMapping, accCtx);
 
+      // Auto-chain: if no input from previous steps, include last step's output
+      const hasStepReference = Object.values(planStep.inputMapping).some(
+        v => typeof v === 'string' && v.startsWith('steps.')
+      );
+
+      if (!hasStepReference && accCtx.completedSteps.size > 0) {
+        // Get the last completed step's output
+        const lastStep = Array.from(accCtx.completedSteps.values()).pop();
+        if (lastStep?.output) {
+          step.input = {
+            ...step.input,
+            input_anterior: lastStep.output,
+            agente_anterior: lastStep.agentName,
+          };
+        }
+      }
+
       // Ensure there's always input for the specialist
-      // If no input was mapped, pass the user's goal and task description
       if (Object.keys(step.input).length === 0) {
         step.input = {
           tarefa: planStep.description || accCtx.userInput.goal,
           objetivo: accCtx.userInput.goal,
-          contexto: JSON.stringify(accCtx.userInput),
         };
+      }
+
+      // Always include the goal for context
+      if (!step.input.objetivo) {
+        step.input.objetivo = accCtx.userInput.goal;
       }
 
       console.log(`[Executor] Step ${step.id} input:`, step.input);
@@ -647,28 +667,49 @@ export const executeRun = async (
     throw new Error('Nenhum especialista disponível. Configure especialistas no orquestrador.');
   }
 
+  // Get execution mode from orchestrator config
+  const executionMode = orchestrator.orchestrationConfig?.executionMode || 'sequencial';
+
   onLog(createLog(
     orchestrator.name,
-    `${availableAgents.length} especialista(s) disponível(is): ${availableAgents.map(a => a.name).join(', ')}`,
+    `${availableAgents.length} especialista(s) disponível(is): ${availableAgents.map(a => a.name).join(', ')} | Modo: ${executionMode}`,
     'PLANNING',
     'info'
   ));
 
   try {
-    // Step 1: Create execution plan
-    onLog(createLog(orchestrator.name, 'Criando plano de execução...', 'PLANNING', 'info'));
+    let plan: ExecutionPlan;
 
-    const plan = await createExecutionPlan(
-      orchestrator,
-      run.goal,
-      availableAgents,
-      client,
-      run.context
-    );
+    // Create plan based on execution mode
+    if (executionMode === 'llm') {
+      // LLM decides the order
+      onLog(createLog(orchestrator.name, 'LLM criando plano de execução...', 'PLANNING', 'info'));
+      plan = await createExecutionPlan(orchestrator, run.goal, availableAgents, client, run.context);
+    } else {
+      // For sequencial/paralelo, use the order of allowedAgents
+      onLog(createLog(orchestrator.name, `Usando modo ${executionMode}...`, 'PLANNING', 'info'));
+      plan = {
+        goal: run.goal,
+        reasoning: executionMode === 'paralelo'
+          ? 'Executando todos especialistas em paralelo'
+          : 'Executando especialistas em cadeia sequencial',
+        steps: availableAgents.map((agent, i) => ({
+          stepId: `step${i + 1}`,
+          agentId: agent.id,
+          agentName: agent.name,
+          description: `Executar ${agent.name}`,
+          inputMapping: {},
+          dependsOn: executionMode === 'sequencial' && i > 0 ? [`step${i}`] : [],
+          priority: i,
+        })),
+        estimatedSteps: availableAgents.length,
+        strategy: executionMode === 'paralelo' ? 'parallel' : 'sequential',
+      };
+    }
 
     onLog(createLog(
       orchestrator.name,
-      `Plano criado: ${plan.reasoning} (estratégia: ${plan.strategy})`,
+      `Plano criado: ${plan.reasoning} (${plan.steps.length} steps)`,
       'PLANNING',
       'success',
       undefined,
