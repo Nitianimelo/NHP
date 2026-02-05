@@ -25,6 +25,8 @@ import {
   Check,
   Globe,
   Copy,
+  Pencil,
+  Maximize,
 } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { useApp } from '../AppContext';
@@ -533,6 +535,13 @@ export const Preview: React.FC = () => {
     setSharedPages(loadSharedPages());
   }, []);
 
+  const loadSharedPageToEditor = useCallback((page: SharedPage) => {
+    setCode(page.html);
+    saveSandboxCode(page.html);
+    setCurrentFileName(page.title || '');
+    setMode('sandbox');
+  }, []);
+
   // === Server Mode ===
   const connectToServer = useCallback(async () => {
     setServerStatus('connecting');
@@ -662,7 +671,7 @@ export const Preview: React.FC = () => {
       {/* Top Toolbar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-800 bg-neutral-950 shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-sm font-semibold">Preview</h1>
+          <h1 className="text-sm font-semibold">Nini Pages</h1>
 
           {/* Mode Toggle */}
           <div className="flex items-center gap-1 p-0.5 bg-neutral-900 rounded">
@@ -847,38 +856,53 @@ export const Preview: React.FC = () => {
                 ))}
               </div>
 
-              {/* Published Pages */}
+              {/* Published Pages / Templates */}
               {sharedPages.length > 0 && (
                 <div className="border-t border-neutral-800">
                   <div className="p-2 text-xs uppercase text-neutral-500 font-medium flex items-center gap-1">
                     <Globe size={10} />
-                    Publicadas ({sharedPages.length})
+                    Templates ({sharedPages.length})
                   </div>
-                  <div className="max-h-32 overflow-y-auto">
-                    {sharedPages.slice(0, 10).map(page => (
+                  <div className="max-h-48 overflow-y-auto">
+                    {sharedPages.slice(0, 20).map(pg => (
                       <div
-                        key={page.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-neutral-900 transition-colors group"
+                        key={pg.id}
+                        className="flex items-center gap-1 px-3 py-1.5 hover:bg-neutral-900 transition-colors group"
                       >
                         <Globe size={10} className="text-green-500 shrink-0" />
+                        <button
+                          onClick={() => loadSharedPageToEditor(pg)}
+                          className="flex-1 text-[11px] truncate text-neutral-400 hover:text-white text-left"
+                          title={`Carregar "${pg.title}" no editor`}
+                        >
+                          {pg.title}
+                        </button>
+                        <button
+                          onClick={() => loadSharedPageToEditor(pg)}
+                          title="Editar no sandbox"
+                          className="p-0.5 rounded text-neutral-700 hover:text-purple-400 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Pencil size={10} />
+                        </button>
                         <a
-                          href={`#/preview/share/${page.id}`}
+                          href={`#/preview/share/${pg.id}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex-1 text-[11px] truncate text-neutral-400 hover:text-white"
-                          title={page.title}
+                          title="Abrir em tela cheia"
+                          className="p-0.5 rounded text-neutral-700 hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100"
                         >
-                          {page.title}
+                          <Maximize size={10} />
                         </a>
                         <button
-                          onClick={() => copyShareUrl(page.id)}
+                          onClick={() => copyShareUrl(pg.id)}
                           title="Copiar URL"
                           className="p-0.5 rounded text-neutral-700 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
                         >
                           <Copy size={10} />
                         </button>
                         <button
-                          onClick={() => handleDeleteShared(page.id)}
+                          onClick={() => handleDeleteShared(pg.id)}
+                          title="Excluir"
                           className="p-0.5 rounded text-neutral-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
                         >
                           <X size={10} />
@@ -986,8 +1010,8 @@ export const Preview: React.FC = () => {
               <iframe
                 ref={iframeRef}
                 srcDoc={code}
-                title="Preview"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                title="Nini Pages Preview"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-popups-to-escape-sandbox allow-top-navigation allow-downloads allow-presentation"
                 className="w-full h-full border-0"
                 style={{ backgroundColor: '#fff' }}
               />
@@ -1192,7 +1216,7 @@ export const PreviewShare: React.FC = () => {
             href="#/preview"
             className="inline-flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded hover:bg-neutral-200"
           >
-            Voltar ao Preview
+            Voltar ao Nini Pages
           </a>
         </div>
       </div>
@@ -1243,11 +1267,10 @@ export const PreviewShare: React.FC = () => {
         </div>
       </div>
 
-      {/* Full iframe */}
+      {/* Full iframe — no sandbox restrictions for full functionality */}
       <iframe
         srcDoc={page.html}
         title={page.title}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
         className="flex-1 w-full border-0"
         style={{ backgroundColor: '#fff' }}
       />

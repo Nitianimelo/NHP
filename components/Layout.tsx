@@ -7,7 +7,7 @@ const navItems = [
   { to: '/chat', icon: MessageCircle, label: 'Chat' },
   { to: '/agents', icon: Bot, label: 'Agentes' },
   { to: '/runs', icon: Play, label: 'Execuções' },
-  { to: '/preview', icon: Eye, label: 'Preview' },
+  { to: '/preview', icon: Eye, label: 'Nini Pages' },
   { to: '/knowledge', icon: Database, label: 'Knowledge' },
   { to: '/api', icon: Key, label: 'API' },
   { to: '/settings', icon: Settings, label: 'Config' },
