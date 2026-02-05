@@ -33,10 +33,89 @@ export interface ExecutionContext {
   onRunUpdate: (run: Partial<Run>) => void;
 }
 
+// === Execution Configuration ===
+export interface ExecutionConfig {
+  maxRetries: number;
+  retryDelayMs: number;
+  stepTimeoutMs: number;
+  enableParallel: boolean;
+}
+
+const DEFAULT_CONFIG: ExecutionConfig = {
+  maxRetries: 3,
+  retryDelayMs: 1000,
+  stepTimeoutMs: 60000, // 60 seconds
+  enableParallel: true,
+};
+
 // === Utility Functions ===
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
 const timestamp = () => new Date().toISOString();
+
+// === Retry with Exponential Backoff ===
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const withRetry = async <T>(
+  fn: () => Promise<T>,
+  config: { maxRetries: number; delayMs: number; onRetry?: (attempt: number, error: Error) => void }
+): Promise<T> => {
+  let lastError: Error = new Error('Unknown error');
+
+  for (let attempt = 1; attempt <= config.maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      if (attempt < config.maxRetries) {
+        config.onRetry?.(attempt, lastError);
+        // Exponential backoff: 1s, 2s, 4s, etc.
+        await sleep(config.delayMs * Math.pow(2, attempt - 1));
+      }
+    }
+  }
+
+  throw lastError;
+};
+
+// === Timeout Wrapper ===
+const withTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  errorMessage = 'Operation timed out'
+): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout>;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    clearTimeout(timeoutId!);
+    return result;
+  } catch (error) {
+    clearTimeout(timeoutId!);
+    throw error;
+  }
+};
+
+// === Dependency Graph Utils ===
+const getReadySteps = (
+  allSteps: PlanStep[],
+  completedStepIds: Set<string>,
+  runningStepIds: Set<string>
+): PlanStep[] => {
+  return allSteps.filter(step => {
+    // Skip if already completed or running
+    if (completedStepIds.has(step.stepId) || runningStepIds.has(step.stepId)) {
+      return false;
+    }
+    // Check if all dependencies are completed
+    return step.dependsOn.every(depId => completedStepIds.has(depId));
+  });
+};
 
 const createLog = (
   agentName: string,
@@ -56,14 +135,22 @@ const createLog = (
   artifact,
 });
 
+// === Accumulated Context ===
+// Keeps track of all outputs for richer context passing
+interface AccumulatedContext {
+  userInput: Record<string, unknown>;
+  completedSteps: Map<string, Step>;
+  globalContext: Record<string, unknown>;
+}
+
 // === Input Resolution ===
 // Resolves input mappings like "user_input.field" or "steps.step1.output.field"
 const resolveInputMapping = (
   mapping: Record<string, string>,
-  userInput: Record<string, unknown>,
-  completedSteps: Map<string, Step>
+  ctx: AccumulatedContext
 ): StepInput => {
   const resolved: StepInput = {};
+  const { userInput, completedSteps, globalContext } = ctx;
 
   for (const [targetField, sourcePath] of Object.entries(mapping)) {
     const parts = sourcePath.split('.');
@@ -83,9 +170,24 @@ const resolveInputMapping = (
           : step.output;
       }
     } else if (parts[0] === 'context') {
-      // e.g., "context.someValue" -> context.someValue
-      // Context is passed separately
-      resolved[targetField] = sourcePath;
+      // e.g., "context.someValue" -> globalContext.someValue
+      resolved[targetField] = parts.length > 1
+        ? globalContext[parts[1]]
+        : globalContext;
+    } else if (parts[0] === 'last_output') {
+      // Get the most recent step output
+      const stepsArray = Array.from(completedSteps.values());
+      const lastStep = stepsArray[stepsArray.length - 1];
+      if (lastStep?.output) {
+        resolved[targetField] = parts.length > 1
+          ? (lastStep.output as Record<string, unknown>)[parts[1]]
+          : lastStep.output;
+      }
+    } else if (parts[0] === 'all_outputs') {
+      // Get all outputs as an array (useful for consolidation)
+      resolved[targetField] = Array.from(completedSteps.values())
+        .filter(s => s.output)
+        .map(s => ({ stepId: s.id, agentName: s.agentName, output: s.output }));
     } else {
       // Direct value
       resolved[targetField] = sourcePath;
@@ -405,8 +507,49 @@ Provide a coherent, consolidated response that addresses the original goal.
   return lastStep ? JSON.stringify(lastStep.output, null, 2) : 'No results';
 };
 
-// === Main Executor ===
-export const executeRun = async (ctx: ExecutionContext): Promise<Run> => {
+// === Execute Single Step with Retry and Timeout ===
+const executeStepWithRetry = async (
+  step: Step,
+  planStep: PlanStep,
+  agent: Agent,
+  client: OpenRouterClient,
+  accCtx: AccumulatedContext,
+  config: ExecutionConfig,
+  onLog: (log: RunLog) => void
+): Promise<AgentResponse> => {
+  return withRetry(
+    async () => {
+      // Resolve inputs with accumulated context
+      step.input = resolveInputMapping(planStep.inputMapping, accCtx);
+
+      // Execute with timeout
+      return withTimeout(
+        executeSpecialist(agent, step.input, client),
+        config.stepTimeoutMs,
+        `Step ${step.id} timed out after ${config.stepTimeoutMs / 1000}s`
+      );
+    },
+    {
+      maxRetries: config.maxRetries,
+      delayMs: config.retryDelayMs,
+      onRetry: (attempt, error) => {
+        onLog(createLog(
+          agent.name,
+          `Tentativa ${attempt} falhou: ${error.message}. Retentando...`,
+          'PROCESS',
+          'warn',
+          step.id
+        ));
+      },
+    }
+  );
+};
+
+// === Main Executor with Parallel Support ===
+export const executeRun = async (
+  ctx: ExecutionContext,
+  config: ExecutionConfig = DEFAULT_CONFIG
+): Promise<Run> => {
   const { run, agents, client, onLog, onStepUpdate, onRunUpdate } = ctx;
 
   const orchestrator = agents.find(a => a.id === run.orchestratorId);
@@ -436,7 +579,7 @@ export const executeRun = async (ctx: ExecutionContext): Promise<Run> => {
 
     onLog(createLog(
       orchestrator.name,
-      `Plano criado: ${plan.reasoning}`,
+      `Plano criado: ${plan.reasoning} (estratégia: ${plan.strategy})`,
       'PLANNING',
       'success',
       undefined,
@@ -456,39 +599,39 @@ export const executeRun = async (ctx: ExecutionContext): Promise<Run> => {
 
     onRunUpdate({ steps });
 
-    // Step 2: Execute steps
+    // Step 2: Execute steps (parallel or sequential based on strategy)
     const completedSteps = new Map<string, Step>();
-    const userInput: Record<string, unknown> = { goal: run.goal, ...run.context };
+    const completedStepIds = new Set<string>();
+    const runningStepIds = new Set<string>();
+    const failedStepIds = new Set<string>();
 
-    for (const planStep of plan.steps) {
+    const accCtx: AccumulatedContext = {
+      userInput: { goal: run.goal, ...run.context },
+      completedSteps,
+      globalContext: run.context || {},
+    };
+
+    const shouldRunParallel = config.enableParallel &&
+      (plan.strategy === 'parallel' || plan.strategy === 'mixed');
+
+    // Execute a single step
+    const executeStep = async (planStep: PlanStep): Promise<void> => {
       const step = steps.find(s => s.id === planStep.stepId)!;
       const agent = agents.find(a => a.id === planStep.agentId);
 
       if (!agent) {
         step.status = 'failed';
         step.error = `Agent ${planStep.agentId} not found`;
+        failedStepIds.add(step.id);
         onStepUpdate(step);
-        continue;
-      }
-
-      // Check dependencies
-      const dependenciesMet = planStep.dependsOn.every(depId => {
-        const dep = completedSteps.get(depId);
-        return dep && dep.status === 'completed';
-      });
-
-      if (!dependenciesMet) {
-        step.status = 'skipped';
-        step.error = 'Dependencies not met';
-        onStepUpdate(step);
-        continue;
+        return;
       }
 
       // Update step status
       step.status = 'running';
       step.startedAt = timestamp();
+      runningStepIds.add(step.id);
       onStepUpdate(step);
-      onRunUpdate({ currentStepId: step.id });
 
       onLog(createLog(
         orchestrator.name,
@@ -498,57 +641,116 @@ export const executeRun = async (ctx: ExecutionContext): Promise<Run> => {
         step.id
       ));
 
-      // Resolve inputs
-      step.input = resolveInputMapping(planStep.inputMapping, userInput, completedSteps);
-
-      onLog(createLog(
-        agent.name,
-        `Recebendo input: ${JSON.stringify(step.input)}`,
-        'INPUT',
-        'info',
-        step.id
-      ));
-
-      // Execute agent
       onLog(createLog(agent.name, 'Processando...', 'PROCESS', 'info', step.id));
 
       const startTime = Date.now();
-      const result = await executeSpecialist(agent, step.input, client);
-      const duration = Date.now() - startTime;
 
-      // Update step with result
-      step.completedAt = timestamp();
-      step.duration = duration;
-      step.tokensUsed = result.tokensUsed;
-      step.cost = result.cost;
+      try {
+        const result = await executeStepWithRetry(
+          step, planStep, agent, client, accCtx, config, onLog
+        );
 
-      if (result.success && result.output) {
-        step.status = 'completed';
-        step.output = result.output;
-        completedSteps.set(step.id, step);
+        const duration = Date.now() - startTime;
+        step.completedAt = timestamp();
+        step.duration = duration;
+        step.tokensUsed = result.tokensUsed;
+        step.cost = result.cost;
 
-        onLog(createLog(
-          agent.name,
-          'Output gerado',
-          'OUTPUT',
-          'success',
-          step.id,
-          { type: 'json', label: 'Output', content: JSON.stringify(result.output, null, 2) }
-        ));
-      } else {
+        if (result.success && result.output) {
+          step.status = 'completed';
+          step.output = result.output;
+          completedSteps.set(step.id, step);
+          completedStepIds.add(step.id);
+
+          onLog(createLog(
+            agent.name,
+            `Output gerado (${(duration / 1000).toFixed(1)}s)`,
+            'OUTPUT',
+            'success',
+            step.id,
+            { type: 'json', label: 'Output', content: JSON.stringify(result.output, null, 2) }
+          ));
+        } else {
+          throw new Error(result.error || 'Unknown error');
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         step.status = 'failed';
-        step.error = result.error;
+        step.error = errorMessage;
+        step.completedAt = timestamp();
+        step.duration = Date.now() - startTime;
+        failedStepIds.add(step.id);
 
         onLog(createLog(
           agent.name,
-          `Erro: ${result.error}`,
+          `Erro após ${config.maxRetries} tentativas: ${errorMessage}`,
           'OUTPUT',
           'error',
           step.id
         ));
+      } finally {
+        runningStepIds.delete(step.id);
+        onStepUpdate(step);
       }
+    };
 
-      onStepUpdate(step);
+    if (shouldRunParallel) {
+      // Parallel execution based on dependency graph
+      onLog(createLog(orchestrator.name, 'Executando em modo paralelo', 'PROCESS', 'info'));
+
+      while (completedStepIds.size + failedStepIds.size < plan.steps.length) {
+        const readySteps = getReadySteps(plan.steps, completedStepIds, runningStepIds);
+
+        if (readySteps.length === 0 && runningStepIds.size === 0) {
+          // No ready steps and nothing running - check for skipped due to failed deps
+          const remainingSteps = plan.steps.filter(
+            ps => !completedStepIds.has(ps.stepId) && !failedStepIds.has(ps.stepId)
+          );
+          for (const ps of remainingSteps) {
+            const step = steps.find(s => s.id === ps.stepId)!;
+            step.status = 'skipped';
+            step.error = 'Dependências falharam';
+            failedStepIds.add(step.id);
+            onStepUpdate(step);
+          }
+          break;
+        }
+
+        if (readySteps.length > 0) {
+          onLog(createLog(
+            orchestrator.name,
+            `Executando ${readySteps.length} step(s) em paralelo: ${readySteps.map(s => s.stepId).join(', ')}`,
+            'DELEGATION',
+            'info'
+          ));
+
+          // Execute all ready steps in parallel
+          await Promise.all(readySteps.map(ps => executeStep(ps)));
+        } else {
+          // Wait a bit for running steps to complete
+          await sleep(100);
+        }
+      }
+    } else {
+      // Sequential execution
+      onLog(createLog(orchestrator.name, 'Executando em modo sequencial', 'PROCESS', 'info'));
+
+      for (const planStep of plan.steps) {
+        // Check dependencies
+        const dependenciesMet = planStep.dependsOn.every(depId => completedStepIds.has(depId));
+
+        if (!dependenciesMet) {
+          const step = steps.find(s => s.id === planStep.stepId)!;
+          step.status = 'skipped';
+          step.error = 'Dependências não satisfeitas';
+          failedStepIds.add(step.id);
+          onStepUpdate(step);
+          continue;
+        }
+
+        onRunUpdate({ currentStepId: planStep.stepId });
+        await executeStep(planStep);
+      }
     }
 
     // Step 3: Consolidate
@@ -565,12 +767,13 @@ export const executeRun = async (ctx: ExecutionContext): Promise<Run> => {
     // Calculate totals
     const totalTokens = steps.reduce((sum, s) => sum + (s.tokensUsed || 0), 0);
     const totalCost = steps.reduce((sum, s) => sum + (s.cost || 0), 0);
+    const hasFailures = failedStepIds.size > 0;
 
     onLog(createLog(
       orchestrator.name,
-      'Execução finalizada',
+      `Execução finalizada (${completedStepIds.size}/${plan.steps.length} steps completos)`,
       'OUTPUT',
-      'success',
+      hasFailures ? 'warn' : 'success',
       undefined,
       { type: 'markdown', label: 'Resultado Final', content: consolidatedOutput }
     ));
@@ -578,7 +781,7 @@ export const executeRun = async (ctx: ExecutionContext): Promise<Run> => {
     // Final update
     const endTime = timestamp();
     const finalRun: Partial<Run> = {
-      status: 'completed',
+      status: hasFailures && completedStepIds.size === 0 ? 'failed' : 'completed',
       steps,
       consolidatedOutput,
       endTime,
