@@ -21,7 +21,12 @@ import {
   Loader2,
   ChevronDown,
   Sparkles,
+  Link2,
+  Check,
+  Globe,
+  Copy,
 } from 'lucide-react';
+import { useParams } from 'react-router-dom';
 import { useApp } from '../AppContext';
 import { createOpenRouterClient, OpenRouterModel } from '../lib/openrouter';
 
@@ -109,11 +114,74 @@ const SANDBOX_STORAGE_KEY = 'nhp_preview_sandbox';
 const SANDBOX_FILES_KEY = 'nhp_preview_sandbox_files';
 const AI_CHAT_KEY = 'nhp_preview_ai_chat';
 const AI_MODEL_KEY = 'nhp_preview_ai_model';
+const SHARED_PAGES_KEY = 'nhp_shared_pages';
 
 interface SandboxFile {
   name: string;
   content: string;
   createdAt: string;
+}
+
+interface SharedPage {
+  id: string;
+  title: string;
+  html: string;
+  createdAt: string;
+  viewport?: string;
+}
+
+function generateShareId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 6)}`;
+}
+
+function loadSharedPages(): SharedPage[] {
+  try {
+    const stored = localStorage.getItem(SHARED_PAGES_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSharedPages(pages: SharedPage[]) {
+  try {
+    localStorage.setItem(SHARED_PAGES_KEY, JSON.stringify(pages));
+  } catch {}
+}
+
+function getSharedPage(id: string): SharedPage | null {
+  const pages = loadSharedPages();
+  return pages.find(p => p.id === id) || null;
+}
+
+function publishPage(html: string, title?: string, viewport?: string): SharedPage {
+  const page: SharedPage = {
+    id: generateShareId(),
+    title: title || extractTitleFromHtml(html) || `Page ${new Date().toLocaleString('pt-BR')}`,
+    html,
+    createdAt: new Date().toISOString(),
+    viewport,
+  };
+  const pages = loadSharedPages();
+  pages.unshift(page);
+  // Keep max 50 shared pages
+  if (pages.length > 50) pages.splice(50);
+  saveSharedPages(pages);
+  return page;
+}
+
+function deleteSharedPage(id: string) {
+  const pages = loadSharedPages().filter(p => p.id !== id);
+  saveSharedPages(pages);
+}
+
+function extractTitleFromHtml(html: string): string | null {
+  const match = html.match(/<title[^>]*>(.*?)<\/title>/i);
+  return match ? match[1].trim() : null;
+}
+
+function getShareUrl(id: string): string {
+  return `${window.location.origin}${window.location.pathname}#/preview/share/${id}`;
 }
 
 function loadSandboxCode(): string {
@@ -222,6 +290,8 @@ export const Preview: React.FC = () => {
   const [sandboxFiles, setSandboxFiles] = useState<SandboxFile[]>(loadSandboxFiles);
   const [currentFileName, setCurrentFileName] = useState('');
   const [showChat, setShowChat] = useState(true);
+  const [sharedPages, setSharedPages] = useState<SharedPage[]>(loadSharedPages);
+  const [urlCopied, setUrlCopied] = useState(false);
 
   // Server mode state
   const [serverStatus, setServerStatus] = useState<ServerStatus>('disconnected');
@@ -395,6 +465,39 @@ export const Preview: React.FC = () => {
     setAiMessages([]);
     saveAiMessages([]);
     setAiError(null);
+  }, []);
+
+  // === Publish / Share ===
+  const publishCurrentPage = useCallback(() => {
+    const currentCode = codeRef.current;
+    if (!currentCode || currentCode === DEFAULT_HTML) return;
+
+    const page = publishPage(currentCode, currentFileName || undefined, viewport);
+    setSharedPages(loadSharedPages());
+
+    const url = getShareUrl(page.id);
+    navigator.clipboard.writeText(url).then(() => {
+      setUrlCopied(true);
+      setTimeout(() => setUrlCopied(false), 3000);
+    }).catch(() => {
+      // Fallback for non-HTTPS
+      prompt('Copie a URL:', url);
+    });
+  }, [currentFileName, viewport]);
+
+  const copyShareUrl = useCallback((id: string) => {
+    const url = getShareUrl(id);
+    navigator.clipboard.writeText(url).then(() => {
+      setUrlCopied(true);
+      setTimeout(() => setUrlCopied(false), 3000);
+    }).catch(() => {
+      prompt('Copie a URL:', url);
+    });
+  }, []);
+
+  const handleDeleteShared = useCallback((id: string) => {
+    deleteSharedPage(id);
+    setSharedPages(loadSharedPages());
   }, []);
 
   // === Server Mode ===
@@ -612,6 +715,20 @@ export const Preview: React.FC = () => {
             </div>
           )}
 
+          {/* Publish Button */}
+          <button
+            onClick={publishCurrentPage}
+            title="Publicar e copiar URL"
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+              urlCopied
+                ? 'bg-green-600 text-white'
+                : 'text-neutral-500 hover:text-white bg-neutral-900'
+            }`}
+          >
+            {urlCopied ? <Check size={12} /> : <Link2 size={12} />}
+            {urlCopied ? 'URL copiada!' : 'Publicar'}
+          </button>
+
           {/* AI Chat Toggle */}
           <button
             onClick={() => setShowChat(!showChat)}
@@ -685,6 +802,48 @@ export const Preview: React.FC = () => {
                   </div>
                 ))}
               </div>
+
+              {/* Published Pages */}
+              {sharedPages.length > 0 && (
+                <div className="border-t border-neutral-800">
+                  <div className="p-2 text-xs uppercase text-neutral-500 font-medium flex items-center gap-1">
+                    <Globe size={10} />
+                    Publicadas ({sharedPages.length})
+                  </div>
+                  <div className="max-h-32 overflow-y-auto">
+                    {sharedPages.slice(0, 10).map(page => (
+                      <div
+                        key={page.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-neutral-900 transition-colors group"
+                      >
+                        <Globe size={10} className="text-green-500 shrink-0" />
+                        <a
+                          href={`#/preview/share/${page.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 text-[11px] truncate text-neutral-400 hover:text-white"
+                          title={page.title}
+                        >
+                          {page.title}
+                        </a>
+                        <button
+                          onClick={() => copyShareUrl(page.id)}
+                          title="Copiar URL"
+                          className="p-0.5 rounded text-neutral-700 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Copy size={10} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteShared(page.id)}
+                          className="p-0.5 rounded text-neutral-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Code Editor */}
               <div className="border-t border-neutral-800">
@@ -926,6 +1085,103 @@ export const Preview: React.FC = () => {
           </aside>
         )}
       </div>
+    </div>
+  );
+};
+
+// === Shared Page Viewer (full-screen, no NHP UI) ===
+export const PreviewShare: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const [page, setPage] = useState<SharedPage | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (id) {
+      const found = getSharedPage(id);
+      if (found) {
+        setPage(found);
+      } else {
+        setNotFound(true);
+      }
+    } else {
+      setNotFound(true);
+    }
+  }, [id]);
+
+  if (notFound) {
+    return (
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center text-center p-8">
+        <div className="space-y-4">
+          <Globe size={48} className="mx-auto text-neutral-700" />
+          <h1 className="text-xl font-semibold text-white">Pagina nao encontrada</h1>
+          <p className="text-sm text-neutral-500 max-w-md">
+            Esta pagina pode ter sido removida ou o link e invalido.
+            Paginas publicadas ficam salvas apenas no navegador de quem publicou.
+          </p>
+          <a
+            href="#/preview"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded hover:bg-neutral-200"
+          >
+            Voltar ao Preview
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  if (!page) {
+    return (
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
+        <Loader2 size={24} className="animate-spin text-neutral-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-screen w-screen flex flex-col bg-neutral-950">
+      {/* Minimal top bar */}
+      <div className="flex items-center justify-between px-4 py-2 bg-neutral-900 border-b border-neutral-800 shrink-0">
+        <div className="flex items-center gap-3">
+          <Globe size={14} className="text-green-400" />
+          <span className="text-xs font-medium text-white">{page.title}</span>
+          <span className="text-[10px] text-neutral-600">
+            {new Date(page.createdAt).toLocaleString('pt-BR')}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(window.location.href).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              });
+            }}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors ${
+              copied ? 'bg-green-600 text-white' : 'text-neutral-400 hover:text-white bg-neutral-800'
+            }`}
+          >
+            {copied ? <Check size={10} /> : <Copy size={10} />}
+            {copied ? 'Copiado!' : 'Copiar URL'}
+          </button>
+          <a
+            href="#/preview"
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-neutral-400 hover:text-white bg-neutral-800 transition-colors"
+          >
+            <Code2 size={10} />
+            Editor
+          </a>
+        </div>
+      </div>
+
+      {/* Full iframe */}
+      <iframe
+        srcDoc={page.html}
+        title={page.title}
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        className="flex-1 w-full border-0"
+        style={{ backgroundColor: '#fff' }}
+      />
     </div>
   );
 };
