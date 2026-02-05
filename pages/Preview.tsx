@@ -84,21 +84,25 @@ const DEFAULT_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
-const AI_SYSTEM_PROMPT = `You are a frontend developer assistant. The user will provide you their current HTML/CSS/JS code for a landing page, along with a modification request.
+const AI_SYSTEM_PROMPT = `You are a frontend developer assistant that modifies HTML/CSS/JS code for landing pages.
 
-Your job:
-1. Read the current code carefully
-2. Make ONLY the requested change — do not refactor or change anything else
-3. Return the FULL modified HTML code inside a single code block
+CRITICAL FORMAT RULES:
+1. Write a 1-line summary of your change
+2. Then return the COMPLETE modified HTML inside a SINGLE code block:
+\`\`\`html
+<!DOCTYPE html>
+...full code here...
+</html>
+\`\`\`
+3. NEVER return partial code or just the changed snippet
+4. ALWAYS use \`\`\`html to open and \`\`\` to close the code block
+5. The code block MUST contain the entire file from <!DOCTYPE> to </html>
 
-Rules:
-- Always return the complete file, not just the changed parts
-- Wrap your code in \`\`\`html and \`\`\` markers
+Other rules:
+- Make ONLY the requested change — do not refactor or reorganize anything else
 - Keep all existing styles, scripts, and structure unless told otherwise
 - Be precise and minimal — only change what was asked
-- If the user asks something ambiguous, make the most reasonable choice
-- Respond in the same language as the user (Portuguese if they write in Portuguese)
-- Before the code block, write a brief 1-line summary of what you changed`;
+- Respond in the same language as the user (Portuguese if they write in Portuguese)`;
 
 // === Sandbox Storage ===
 const SANDBOX_STORAGE_KEY = 'nhp_preview_sandbox';
@@ -156,22 +160,54 @@ function saveAiMessages(messages: AiMessage[]) {
   } catch {}
 }
 
-// Extract HTML code from AI response
+// Extract HTML code from AI response — robust against multiple code-block formats
 function extractHtmlFromResponse(text: string): string | null {
-  // Try ```html ... ```
-  const htmlBlock = text.match(/```html\s*\n([\s\S]*?)```/);
-  if (htmlBlock) return htmlBlock[1].trim();
+  // 1. ```html ... ``` (case-insensitive, optional whitespace/newline after tag)
+  const htmlBlock = text.match(/```(?:html|htm|HTML)\s*([\s\S]*?)```/);
+  if (htmlBlock) {
+    const content = htmlBlock[1].trim();
+    if (content.length > 10) return content;
+  }
 
-  // Try ``` ... ``` (generic code block that looks like HTML)
-  const genericBlock = text.match(/```\s*\n([\s\S]*?)```/);
-  if (genericBlock) {
-    const content = genericBlock[1].trim();
-    if (content.includes('<!DOCTYPE') || content.includes('<html') || content.includes('<head')) {
+  // 2. Generic ``` ... ``` that contains HTML
+  const genericBlocks = text.matchAll(/```\s*([\s\S]*?)```/g);
+  for (const match of genericBlocks) {
+    const content = match[1].trim();
+    if (
+      content.length > 10 &&
+      (content.includes('<!DOCTYPE') ||
+       content.includes('<!doctype') ||
+       content.includes('<html') ||
+       content.includes('<head') ||
+       content.includes('<body') ||
+       (content.includes('<div') && content.includes('<style')))
+    ) {
       return content;
     }
   }
 
+  // 3. No code blocks at all — look for raw HTML in the response
+  // Find the longest substring that starts with <!DOCTYPE or <html and ends with </html>
+  const rawHtml = text.match(/(<!DOCTYPE[\s\S]*?<\/html\s*>)/i);
+  if (rawHtml) return rawHtml[1].trim();
+
+  // 4. Partial raw HTML (no </html> closing but has structure)
+  const partialHtml = text.match(/(<!DOCTYPE[\s\S]*)/i);
+  if (partialHtml && partialHtml[1].includes('<body') && partialHtml[1].length > 50) {
+    return partialHtml[1].trim();
+  }
+
   return null;
+}
+
+// Strip code blocks from display text, keeping only the summary
+function stripCodeBlocksForDisplay(text: string): string {
+  // Remove all code blocks (```...```) and replace with marker
+  return text
+    .replace(/```(?:html|htm|HTML)?\s*[\s\S]*?```/g, '\n[codigo aplicado ao preview]\n')
+    .replace(/<!DOCTYPE[\s\S]*<\/html\s*>/gi, '\n[codigo aplicado ao preview]\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 // === Main Component ===
@@ -207,6 +243,10 @@ export const Preview: React.FC = () => {
   const wsRef = useRef<WebSocket | null>(null);
   const codeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const codeRef = useRef(code);
+
+  // Keep codeRef always in sync
+  useEffect(() => { codeRef.current = code; }, [code]);
 
   // === Load Models ===
   useEffect(() => {
@@ -297,13 +337,16 @@ export const Preview: React.FC = () => {
     setAiMessages(nextMessages);
     setAiInput('');
 
+    // Always use the ref to get the freshest code
+    const currentCode = codeRef.current;
+
     try {
       // Build conversation history for the API
       const apiMessages = [
         { role: 'system' as const, content: AI_SYSTEM_PROMPT },
-        // Include current code context
-        { role: 'user' as const, content: `Current HTML code:\n\`\`\`html\n${code}\n\`\`\`` },
-        { role: 'assistant' as const, content: 'Understood. I have the current code. What change would you like?' },
+        // Include current code context — always fresh via ref
+        { role: 'user' as const, content: `Here is the current HTML code of the page:\n\`\`\`html\n${currentCode}\n\`\`\`` },
+        { role: 'assistant' as const, content: 'Got it. I have the current code. Tell me what to change.' },
         // Previous conversation (last 10 messages for context)
         ...nextMessages.slice(-10).map(m => ({
           role: m.role as 'user' | 'assistant',
@@ -315,7 +358,7 @@ export const Preview: React.FC = () => {
         model: aiModel,
         messages: apiMessages,
         temperature: 0.3,
-        max_tokens: 4096,
+        max_tokens: 16384,
       });
 
       const assistantContent = response.choices[0]?.message?.content || 'Sem resposta.';
@@ -346,7 +389,7 @@ export const Preview: React.FC = () => {
     } finally {
       setAiSending(false);
     }
-  }, [aiInput, aiSending, aiMessages, aiModel, code, apiConfig]);
+  }, [aiInput, aiSending, aiMessages, aiModel, apiConfig]);
 
   const clearAiChat = useCallback(() => {
     setAiMessages([]);
@@ -825,7 +868,7 @@ export const Preview: React.FC = () => {
                     )}
                     <p className="whitespace-pre-wrap break-words leading-relaxed">
                       {msg.role === 'assistant'
-                        ? msg.content.replace(/```html[\s\S]*?```/g, '[codigo aplicado]').replace(/```[\s\S]*?```/g, '[codigo]')
+                        ? stripCodeBlocksForDisplay(msg.content)
                         : msg.content}
                     </p>
                   </div>
