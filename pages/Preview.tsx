@@ -1196,52 +1196,10 @@ export const PreviewShare: React.FC = () => {
       });
   }, [id]);
 
-  // Replace the entire document with the published HTML
-  function renderPublishedPage(html: string, title: string) {
-    // Inject a minimal floating toolbar into the HTML
-    const toolbar = `
-<style>
-  #nhp-pub-toolbar {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 999999;
-    opacity: 0; transition: opacity 0.3s; pointer-events: none;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  }
-  #nhp-pub-toolbar:hover { opacity: 1; pointer-events: auto; }
-  #nhp-pub-toolbar-inner {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 16px; background: rgba(0,0,0,0.75); backdrop-filter: blur(12px);
-  }
-  #nhp-pub-toolbar span { color: #aaa; font-size: 11px; }
-  #nhp-pub-toolbar a, #nhp-pub-toolbar button {
-    color: #999; font-size: 11px; text-decoration: none; padding: 4px 10px;
-    border-radius: 4px; background: rgba(255,255,255,0.1); border: none; cursor: pointer;
-    margin-left: 6px; transition: all 0.2s;
-  }
-  #nhp-pub-toolbar a:hover, #nhp-pub-toolbar button:hover {
-    color: #fff; background: rgba(255,255,255,0.2);
-  }
-</style>
-<div id="nhp-pub-toolbar">
-  <div id="nhp-pub-toolbar-inner">
-    <span>${title}</span>
-    <div>
-      <button onclick="navigator.clipboard.writeText(window.location.href).then(function(){this.textContent='Copiado!'}.bind(this))">Copiar URL</button>
-      <a href="${window.location.origin}${window.location.pathname}#/preview">Editor</a>
-    </div>
-  </div>
-</div>
-<script>
-document.addEventListener('mousemove', function(e) {
-  var tb = document.getElementById('nhp-pub-toolbar');
-  if (!tb) return;
-  if (e.clientY < 50) { tb.style.opacity = '1'; tb.style.pointerEvents = 'auto'; }
-  else { tb.style.opacity = '0'; tb.style.pointerEvents = 'none'; }
-});
-<\/script>`;
-
-    // Write directly to document — replaces React entirely, page IS the published content
+  // Replace the entire document with the published HTML — clean, no extras
+  function renderPublishedPage(html: string, _title: string) {
     document.open();
-    document.write(html.replace(/<\/body>/i, toolbar + '</body>'));
+    document.write(html);
     document.close();
   }
 
