@@ -23,6 +23,8 @@ import {
   ORCHESTRATOR_PLAN_SCHEMA,
 } from './openrouter';
 
+import { getKnowledgeForAgent, searchKnowledge, SupabaseKnowledge } from './supabase';
+
 // === Types ===
 export interface ExecutionContext {
   run: Run;
@@ -224,11 +226,66 @@ const isImageGenerationModel = (modelId: string): boolean => {
   return IMAGE_GENERATION_MODELS.some(m => modelLower.includes(m));
 };
 
+// === RAG Knowledge Retrieval ===
+const retrieveKnowledgeForAgent = async (
+  agentId: string,
+  query: string
+): Promise<SupabaseKnowledge[]> => {
+  try {
+    const agentIdNum = parseInt(agentId, 10);
+
+    // First, get knowledge specifically for this agent
+    const agentKnowledge = isNaN(agentIdNum) ? [] : await getKnowledgeForAgent(agentIdNum);
+
+    // Then search for relevant knowledge based on the query
+    const searchResults = await searchKnowledge(query, isNaN(agentIdNum) ? undefined : agentIdNum);
+
+    // Combine and deduplicate
+    const allKnowledge = new Map<number, SupabaseKnowledge>();
+
+    for (const k of agentKnowledge) {
+      if (k.id) allKnowledge.set(k.id, k);
+    }
+
+    for (const k of searchResults) {
+      if (k.id && !allKnowledge.has(k.id)) {
+        allKnowledge.set(k.id, k);
+      }
+    }
+
+    return Array.from(allKnowledge.values()).slice(0, 5); // Limit to 5 entries
+  } catch (error) {
+    console.error('[RAG] Failed to retrieve knowledge:', error);
+    return [];
+  }
+};
+
+// Format knowledge for injection into system prompt
+const formatKnowledgeContext = (knowledge: SupabaseKnowledge[]): string => {
+  if (knowledge.length === 0) return '';
+
+  const formatted = knowledge.map(k => {
+    const header = `### ${k.titulo}${k.tags ? ` [${k.tags}]` : ''}`;
+    return `${header}\n${k.conteudo}`;
+  }).join('\n\n---\n\n');
+
+  return `
+## CONHECIMENTO DISPONÍVEL (RAG)
+Use as informações abaixo como referência para sua resposta:
+
+${formatted}
+
+---
+`
+;
+};
+
 // === Specialist Executor ===
 export const executeSpecialist = async (
   agent: Agent,
   input: StepInput,
-  client: OpenRouterClient
+  client: OpenRouterClient,
+  enableRag: boolean = true
 ): Promise<AgentResponse> => {
   try {
     // Check if this is an image generation model
@@ -263,13 +320,28 @@ export const executeSpecialist = async (
     }
 
     // Regular text model execution
-    // Build system prompt with output schema
-    const systemPrompt = buildSystemPrompt(
+    // Retrieve RAG knowledge if enabled
+    let knowledgeContext = '';
+    if (enableRag && agent.ragEnabled !== false) {
+      const query = input.objetivo || input.tarefa || Object.values(input).filter(v => typeof v === 'string').join(' ');
+      const knowledge = await retrieveKnowledgeForAgent(agent.id, String(query));
+      if (knowledge.length > 0) {
+        console.log(`[RAG] Retrieved ${knowledge.length} knowledge entries for ${agent.name}`);
+        knowledgeContext = formatKnowledgeContext(knowledge);
+      }
+    }
+
+    // Build system prompt with output schema and RAG context
+    const basePrompt = buildSystemPrompt(
       agent.role,
       agent.description,
       agent.systemPrompt,
       agent.outputSchema
     );
+
+    const systemPrompt = knowledgeContext
+      ? `${basePrompt}\n\n${knowledgeContext}`
+      : basePrompt;
 
     // Build user message from input
     const userMessage = Object.entries(input)
