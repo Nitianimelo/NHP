@@ -475,9 +475,13 @@ export const Preview: React.FC = () => {
   }, []);
 
   // === Publish / Share ===
+  const [publishStatus, setPublishStatus] = useState<'idle' | 'publishing' | 'success' | 'error'>('idle');
+
   const publishCurrentPage = useCallback(async () => {
     const currentCode = codeRef.current;
     if (!currentCode || currentCode === DEFAULT_HTML) return;
+
+    setPublishStatus('publishing');
 
     // Save locally
     const page = publishPage(currentCode, currentFileName || undefined, viewport);
@@ -490,9 +494,16 @@ export const Preview: React.FC = () => {
       createdAt: page.createdAt,
       viewport: page.viewport,
     };
-    publishPageToSupabase(pageData).catch(() => {
-      console.warn('Failed to publish to Supabase, page available locally only');
-    });
+
+    const supabaseOk = await publishPageToSupabase(pageData);
+    if (!supabaseOk) {
+      setPublishStatus('error');
+      alert('Erro ao salvar no Supabase. Verifique se a tabela NHP tem RLS desabilitado ou uma policy permitindo INSERT. A pagina ficou salva localmente apenas.');
+      setTimeout(() => setPublishStatus('idle'), 4000);
+    } else {
+      setPublishStatus('success');
+      setTimeout(() => setPublishStatus('idle'), 3000);
+    }
 
     setSharedPages(loadSharedPages());
 
@@ -740,15 +751,26 @@ export const Preview: React.FC = () => {
           {/* Publish Button */}
           <button
             onClick={publishCurrentPage}
+            disabled={publishStatus === 'publishing'}
             title="Publicar e copiar URL"
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-              urlCopied
-                ? 'bg-green-600 text-white'
-                : 'text-neutral-500 hover:text-white bg-neutral-900'
+              publishStatus === 'error'
+                ? 'bg-red-600 text-white'
+                : publishStatus === 'success' || urlCopied
+                  ? 'bg-green-600 text-white'
+                  : publishStatus === 'publishing'
+                    ? 'bg-blue-600 text-white animate-pulse'
+                    : 'text-neutral-500 hover:text-white bg-neutral-900'
             }`}
           >
-            {urlCopied ? <Check size={12} /> : <Link2 size={12} />}
-            {urlCopied ? 'URL copiada!' : 'Publicar'}
+            {publishStatus === 'publishing' ? <Loader2 size={12} className="animate-spin" />
+              : publishStatus === 'error' ? <X size={12} />
+              : urlCopied ? <Check size={12} />
+              : <Link2 size={12} />}
+            {publishStatus === 'publishing' ? 'Salvando...'
+              : publishStatus === 'error' ? 'Erro Supabase'
+              : urlCopied ? 'URL copiada!'
+              : 'Publicar'}
           </button>
 
           {/* AI Chat Toggle */}
