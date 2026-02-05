@@ -366,24 +366,32 @@ export const createExecutionPlan = async (
     context
   );
 
-  // Add JSON instruction to system prompt
-  const systemPrompt = `${orchestrator.systemPrompt || 'You are an orchestrator that plans task execution.'}
+  // Build list of available agent IDs for the system prompt
+  const agentIdList = availableAgents.map(a => `"${a.id}"`).join(', ');
 
-IMPORTANT: You MUST respond with valid JSON only. No markdown, no explanations outside JSON.
-The JSON must have this exact structure:
+  // Add JSON instruction to system prompt
+  const systemPrompt = `${orchestrator.systemPrompt || 'Você é um orquestrador que planeja a execução de tarefas.'}
+
+IMPORTANTE: Responda APENAS com JSON válido. Sem markdown, sem explicações fora do JSON.
+
+IDs DE AGENTES VÁLIDOS: ${agentIdList || '(nenhum)'}
+
+O JSON DEVE ter esta estrutura:
 {
-  "reasoning": "your analysis of what needs to be done",
+  "reasoning": "sua análise do que precisa ser feito",
   "steps": [
     {
       "stepId": "step1",
-      "agentId": "the agent id from the available agents",
-      "description": "what this step does",
-      "inputMapping": { "fieldName": "user_input.goal" },
+      "agentId": "${availableAgents[0]?.id || 'ID_DO_AGENTE'}",
+      "description": "o que este passo faz",
+      "inputMapping": { "tarefa": "user_input.goal" },
       "dependsOn": []
     }
   ],
   "strategy": "sequential"
-}`;
+}
+
+REGRA CRÍTICA: O campo "agentId" DEVE ser um dos IDs listados acima: ${agentIdList || 'nenhum disponível'}`;
 
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
@@ -543,6 +551,18 @@ const executeStepWithRetry = async (
       // Resolve inputs with accumulated context
       step.input = resolveInputMapping(planStep.inputMapping, accCtx);
 
+      // Ensure there's always input for the specialist
+      // If no input was mapped, pass the user's goal and task description
+      if (Object.keys(step.input).length === 0) {
+        step.input = {
+          tarefa: planStep.description || accCtx.userInput.goal,
+          objetivo: accCtx.userInput.goal,
+          contexto: JSON.stringify(accCtx.userInput),
+        };
+      }
+
+      console.log(`[Executor] Step ${step.id} input:`, step.input);
+
       // Execute with timeout
       return withTimeout(
         executeSpecialist(agent, step.input, client),
@@ -585,9 +605,32 @@ export const executeRun = async (
     a => a.type === 'specialist' && allowedIds.includes(String(a.id))
   );
 
+  // Log available specialists for debugging
+  console.log('[Executor] Orchestrator:', orchestrator.name, 'ID:', orchestrator.id);
+  console.log('[Executor] Allowed IDs:', allowedIds);
+  console.log('[Executor] Available specialists:', availableAgents.map(a => ({ id: a.id, name: a.name })));
+
   // Update run status
   onRunUpdate({ status: 'running' });
   onLog(createLog(orchestrator.name, 'Iniciando execução', 'PLANNING', 'info'));
+
+  // Validate we have specialists
+  if (availableAgents.length === 0) {
+    onLog(createLog(
+      orchestrator.name,
+      'Nenhum especialista configurado para este orquestrador. Configure especialistas na página de agentes.',
+      'PLANNING',
+      'error'
+    ));
+    throw new Error('Nenhum especialista disponível. Configure especialistas no orquestrador.');
+  }
+
+  onLog(createLog(
+    orchestrator.name,
+    `${availableAgents.length} especialista(s) disponível(is): ${availableAgents.map(a => a.name).join(', ')}`,
+    'PLANNING',
+    'info'
+  ));
 
   try {
     // Step 1: Create execution plan
@@ -643,13 +686,33 @@ export const executeRun = async (
       const step = steps.find(s => s.id === planStep.stepId)!;
       // Normalize agentId to string for consistent comparison
       const normalizedAgentId = String(planStep.agentId);
-      const agent = agents.find(a => a.id === normalizedAgentId);
+
+      // Try to find agent by ID first, then by name as fallback
+      let agent = agents.find(a => a.id === normalizedAgentId);
+
+      // Fallback: try to match by name (case-insensitive)
+      if (!agent) {
+        agent = availableAgents.find(a =>
+          a.name.toLowerCase() === planStep.agentName?.toLowerCase() ||
+          a.name.toLowerCase() === normalizedAgentId.toLowerCase()
+        );
+        if (agent) {
+          console.log(`[Executor] Agent matched by name: ${agent.name} (ID: ${agent.id})`);
+        }
+      }
 
       if (!agent) {
         step.status = 'failed';
-        step.error = `Agent ${normalizedAgentId} not found`;
+        step.error = `Agente "${normalizedAgentId}" não encontrado. IDs disponíveis: ${availableAgents.map(a => a.id).join(', ')}`;
         failedStepIds.add(step.id);
         onStepUpdate(step);
+        onLog(createLog(
+          orchestrator.name,
+          `Erro: Agente ${normalizedAgentId} não encontrado no sistema`,
+          'DELEGATION',
+          'error',
+          step.id
+        ));
         return;
       }
 

@@ -405,29 +405,43 @@ export const buildOrchestratorPrompt = (
   availableAgents: Array<{ id: string; name: string; role: string; description: string; inputSchema: unknown[] }>,
   context?: Record<string, unknown>
 ): string => {
-  let prompt = `You are an orchestrator. Your goal is to create an execution plan.
+  // Build a clear list of agents with their exact IDs
+  const agentList = availableAgents.length > 0
+    ? availableAgents.map(a => `- ID: "${a.id}" | Nome: ${a.name} | Função: ${a.description || a.role}`).join('\n')
+    : '(Nenhum especialista disponível)';
 
-## GOAL
+  const prompt = `Você é um orquestrador que planeja a execução de tarefas delegando para especialistas.
+
+## OBJETIVO DO USUÁRIO
 ${goal}
 
-## AVAILABLE AGENTS
-${availableAgents.map(a => `
-### ${a.name} (${a.id})
-- Role: ${a.role}
-- Description: ${a.description}
-- Required Inputs: ${JSON.stringify(a.inputSchema)}
-`).join('\n')}
+## ESPECIALISTAS DISPONÍVEIS
+${agentList}
 
-## RULES
-1. Break down the goal into steps
-2. Each step must use exactly one agent
-3. Map outputs from previous steps to inputs of next steps
-4. Use "user_input" for initial data
-5. Use "steps.<stepId>.output.<field>" for data from previous steps
+## REGRAS IMPORTANTES
+1. SEMPRE use o campo "agentId" com o ID EXATO do agente (ex: "${availableAgents[0]?.id || '1'}")
+2. Cada step deve usar UM especialista
+3. Use "user_input.goal" para passar o objetivo original
+4. Para passos sequenciais, use "steps.step1.output.resultado" para usar saída anterior
 
-${context ? `## CONTEXT\n${JSON.stringify(context, null, 2)}` : ''}
+## FORMATO DE RESPOSTA (JSON obrigatório)
+{
+  "reasoning": "Breve explicação do plano",
+  "steps": [
+    {
+      "stepId": "step1",
+      "agentId": "${availableAgents[0]?.id || 'ID_DO_AGENTE'}",
+      "description": "O que este passo faz",
+      "inputMapping": { "tarefa": "user_input.goal" },
+      "dependsOn": []
+    }
+  ],
+  "strategy": "sequential"
+}
 
-Respond with a JSON execution plan.`;
+${context ? `## CONTEXTO ADICIONAL\n${JSON.stringify(context, null, 2)}` : ''}
+
+Responda APENAS com o JSON do plano. Não inclua explicações fora do JSON.`;
 
   return prompt;
 };
