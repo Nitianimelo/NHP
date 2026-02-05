@@ -53,6 +53,13 @@ const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9
 
 const timestamp = () => new Date().toISOString();
 
+// Ensure temperature is a valid number for API calls
+const ensureNumber = (value: unknown, defaultValue: number): number => {
+  if (typeof value === 'number' && !isNaN(value)) return value;
+  const num = Number(value);
+  return isNaN(num) ? defaultValue : num;
+};
+
 // === Retry with Exponential Backoff ===
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -293,8 +300,8 @@ export const executeSpecialist = async (
         {
           model: agent.model,
           messages,
-          temperature: agent.temperature,
-          max_tokens: agent.maxTokens || 2048,
+          temperature: ensureNumber(agent.temperature, 0.7),
+          max_tokens: ensureNumber(agent.maxTokens, 2048),
         },
         schema
       );
@@ -310,8 +317,8 @@ export const executeSpecialist = async (
       const response = await client.chat({
         model: agent.model,
         messages,
-        temperature: agent.temperature,
-        max_tokens: agent.maxTokens || 2048,
+        temperature: ensureNumber(agent.temperature, 0.7),
+        max_tokens: ensureNumber(agent.maxTokens, 2048),
       });
 
       const content = response.choices[0]?.message?.content || '';
@@ -402,7 +409,7 @@ The JSON must have this exact structure:
       {
         model: orchestrator.model,
         messages,
-        temperature: orchestrator.temperature,
+        temperature: ensureNumber(orchestrator.temperature, 0.7),
       },
       ORCHESTRATOR_PLAN_SCHEMA
     );
@@ -412,7 +419,7 @@ The JSON must have this exact structure:
     const response = await client.chat({
       model: orchestrator.model,
       messages,
-      temperature: orchestrator.temperature,
+      temperature: ensureNumber(orchestrator.temperature, 0.7),
       max_tokens: 2048,
     });
 
