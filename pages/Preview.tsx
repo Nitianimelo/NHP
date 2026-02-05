@@ -1232,46 +1232,51 @@ export const PreviewShare: React.FC = () => {
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-neutral-950">
-      {/* Minimal top bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-neutral-900 border-b border-neutral-800 shrink-0">
-        <div className="flex items-center gap-3">
-          <Globe size={14} className="text-green-400" />
-          <span className="text-xs font-medium text-white">{page.title}</span>
-          <span className="text-[10px] text-neutral-600">
-            {new Date(page.createdAt).toLocaleString('pt-BR')}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              navigator.clipboard.writeText(window.location.href).then(() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              });
-            }}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors ${
-              copied ? 'bg-green-600 text-white' : 'text-neutral-400 hover:text-white bg-neutral-800'
-            }`}
-          >
-            {copied ? <Check size={10} /> : <Copy size={10} />}
-            {copied ? 'Copiado!' : 'Copiar URL'}
-          </button>
-          <a
-            href="#/preview"
-            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-neutral-400 hover:text-white bg-neutral-800 transition-colors"
-          >
-            <Code2 size={10} />
-            Editor
-          </a>
+    <div className="h-screen w-screen relative bg-neutral-950">
+      {/* Floating toolbar — only visible on hover at top of page */}
+      <div
+        className="absolute top-0 left-0 right-0 z-50 opacity-0 hover:opacity-100 transition-opacity duration-300"
+        style={{ pointerEvents: 'auto' }}
+      >
+        <div className="flex items-center justify-between px-4 py-2 bg-black/80 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <Globe size={14} className="text-green-400" />
+            <span className="text-xs font-medium text-white">{page.title}</span>
+            <span className="text-[10px] text-neutral-500">
+              {new Date(page.createdAt).toLocaleString('pt-BR')}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(window.location.href).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                });
+              }}
+              className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors ${
+                copied ? 'bg-green-600 text-white' : 'text-neutral-400 hover:text-white bg-neutral-800/80'
+              }`}
+            >
+              {copied ? <Check size={10} /> : <Copy size={10} />}
+              {copied ? 'Copiado!' : 'Copiar URL'}
+            </button>
+            <a
+              href="#/preview"
+              className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-neutral-400 hover:text-white bg-neutral-800/80 transition-colors"
+            >
+              <Code2 size={10} />
+              Editor
+            </a>
+          </div>
         </div>
       </div>
 
-      {/* Full iframe — no sandbox restrictions for full functionality */}
+      {/* Full-screen iframe — no sandbox, no bars, fully published */}
       <iframe
         srcDoc={page.html}
         title={page.title}
-        className="flex-1 w-full border-0"
+        className="w-full h-full border-0"
         style={{ backgroundColor: '#fff' }}
       />
     </div>
