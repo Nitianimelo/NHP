@@ -29,6 +29,13 @@ import {
 import { useParams } from 'react-router-dom';
 import { useApp } from '../AppContext';
 import { createOpenRouterClient, OpenRouterModel } from '../lib/openrouter';
+import {
+  publishPageToSupabase,
+  getSharedPageFromSupabase,
+  listSharedPagesFromSupabase,
+  deleteSharedPageFromSupabase,
+  SharedPageData,
+} from '../lib/supabase';
 
 // === Types ===
 type ViewportSize = 'mobile' | 'tablet' | 'desktop' | 'full';
@@ -468,11 +475,36 @@ export const Preview: React.FC = () => {
   }, []);
 
   // === Publish / Share ===
-  const publishCurrentPage = useCallback(() => {
+  const [publishStatus, setPublishStatus] = useState<'idle' | 'publishing' | 'success' | 'error'>('idle');
+
+  const publishCurrentPage = useCallback(async () => {
     const currentCode = codeRef.current;
     if (!currentCode || currentCode === DEFAULT_HTML) return;
 
+    setPublishStatus('publishing');
+
+    // Save locally
     const page = publishPage(currentCode, currentFileName || undefined, viewport);
+
+    // Save to Supabase for cross-browser access
+    const pageData: SharedPageData = {
+      id: page.id,
+      title: page.title,
+      html: page.html,
+      createdAt: page.createdAt,
+      viewport: page.viewport,
+    };
+
+    const supabaseOk = await publishPageToSupabase(pageData);
+    if (!supabaseOk) {
+      setPublishStatus('error');
+      alert('Erro ao salvar no Supabase. Verifique se a tabela NHP tem RLS desabilitado ou uma policy permitindo INSERT. A pagina ficou salva localmente apenas.');
+      setTimeout(() => setPublishStatus('idle'), 4000);
+    } else {
+      setPublishStatus('success');
+      setTimeout(() => setPublishStatus('idle'), 3000);
+    }
+
     setSharedPages(loadSharedPages());
 
     const url = getShareUrl(page.id);
@@ -497,6 +529,7 @@ export const Preview: React.FC = () => {
 
   const handleDeleteShared = useCallback((id: string) => {
     deleteSharedPage(id);
+    deleteSharedPageFromSupabase(id).catch(() => {});
     setSharedPages(loadSharedPages());
   }, []);
 
@@ -718,15 +751,26 @@ export const Preview: React.FC = () => {
           {/* Publish Button */}
           <button
             onClick={publishCurrentPage}
+            disabled={publishStatus === 'publishing'}
             title="Publicar e copiar URL"
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-              urlCopied
-                ? 'bg-green-600 text-white'
-                : 'text-neutral-500 hover:text-white bg-neutral-900'
+              publishStatus === 'error'
+                ? 'bg-red-600 text-white'
+                : publishStatus === 'success' || urlCopied
+                  ? 'bg-green-600 text-white'
+                  : publishStatus === 'publishing'
+                    ? 'bg-blue-600 text-white animate-pulse'
+                    : 'text-neutral-500 hover:text-white bg-neutral-900'
             }`}
           >
-            {urlCopied ? <Check size={12} /> : <Link2 size={12} />}
-            {urlCopied ? 'URL copiada!' : 'Publicar'}
+            {publishStatus === 'publishing' ? <Loader2 size={12} className="animate-spin" />
+              : publishStatus === 'error' ? <X size={12} />
+              : urlCopied ? <Check size={12} />
+              : <Link2 size={12} />}
+            {publishStatus === 'publishing' ? 'Salvando...'
+              : publishStatus === 'error' ? 'Erro Supabase'
+              : urlCopied ? 'URL copiada!'
+              : 'Publicar'}
           </button>
 
           {/* AI Chat Toggle */}
@@ -1094,19 +1138,45 @@ export const PreviewShare: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [page, setPage] = useState<SharedPage | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (id) {
-      const found = getSharedPage(id);
-      if (found) {
-        setPage(found);
-      } else {
-        setNotFound(true);
-      }
-    } else {
+    if (!id) {
       setNotFound(true);
+      setLoading(false);
+      return;
     }
+
+    // Try local first
+    const found = getSharedPage(id);
+    if (found) {
+      setPage(found);
+      setLoading(false);
+      return;
+    }
+
+    // Fallback: fetch from Supabase
+    getSharedPageFromSupabase(id)
+      .then((remote) => {
+        if (remote) {
+          setPage({
+            id: remote.id,
+            title: remote.title,
+            html: remote.html,
+            createdAt: remote.createdAt,
+            viewport: remote.viewport,
+          });
+        } else {
+          setNotFound(true);
+        }
+      })
+      .catch(() => {
+        setNotFound(true);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, [id]);
 
   if (notFound) {
@@ -1117,7 +1187,6 @@ export const PreviewShare: React.FC = () => {
           <h1 className="text-xl font-semibold text-white">Pagina nao encontrada</h1>
           <p className="text-sm text-neutral-500 max-w-md">
             Esta pagina pode ter sido removida ou o link e invalido.
-            Paginas publicadas ficam salvas apenas no navegador de quem publicou.
           </p>
           <a
             href="#/preview"
@@ -1130,7 +1199,7 @@ export const PreviewShare: React.FC = () => {
     );
   }
 
-  if (!page) {
+  if (loading || !page) {
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
         <Loader2 size={24} className="animate-spin text-neutral-500" />
