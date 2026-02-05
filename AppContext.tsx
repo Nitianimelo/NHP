@@ -31,6 +31,10 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 /** Map a Supabase agent row to the internal Agent type */
 function mapSupabaseAgent(sa: SupabaseAgent): Agent {
   const agentType: AgentType = sa.tipo === 'orchestrator' ? 'orchestrator' : 'specialist';
+  // Ensure temperature is a number (Supabase might return it as string)
+  const temp = typeof sa.temperatura === 'number' ? sa.temperatura : Number(sa.temperatura);
+  const temperature = isNaN(temp) ? 0.7 : temp;
+
   return {
     id: String(sa.id),
     type: agentType,
@@ -40,7 +44,7 @@ function mapSupabaseAgent(sa: SupabaseAgent): Agent {
     avatar: '',
     model: sa.modelo || 'gpt-4o',
     provider: (sa.modelo || '').split('/')[0] || 'openai',
-    temperature: sa.temperatura ?? 0.7,
+    temperature,
     systemPrompt: sa.system || '',
     ragEnabled: false,
     inputSchema: [],
