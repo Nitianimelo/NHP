@@ -46,6 +46,7 @@ function mapSupabaseAgent(sa: SupabaseAgent): Agent {
     inputSchema: [],
     outputSchema: [],
     allowedActions: [],
+    allowedAgents: sa.especialistas ? sa.especialistas.split(',').map(s => s.trim()).filter(Boolean) : [],
     capabilities: {
       textGeneration: true,
       imageGeneration: false,

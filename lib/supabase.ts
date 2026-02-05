@@ -117,6 +117,7 @@ export interface SupabaseAgent {
   system: string;
   tipo: string;
   temperatura: number;
+  especialistas?: string;
 }
 
 /** List all agents from Supabase */

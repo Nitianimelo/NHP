@@ -16,6 +16,7 @@ import {
   Cpu,
   FileCode2,
   AlertCircle,
+  Users,
 } from 'lucide-react';
 import {
   listAgents,
@@ -243,6 +244,24 @@ export const AgentEditor: React.FC = () => {
   const [system, setSystem] = useState('');
   const [tipo, setTipo] = useState<string>('specialist');
   const [temperatura, setTemperatura] = useState(0.7);
+  const [especialistas, setEspecialistas] = useState<string[]>([]);
+  const [allAgents, setAllAgents] = useState<SupabaseAgent[]>([]);
+
+  // Load all agents (for specialist selector)
+  useEffect(() => {
+    listAgents().then(setAllAgents);
+  }, []);
+
+  const availableSpecialists = allAgents.filter(
+    a => a.tipo === 'specialist' && a.id != null && a.id !== numericId
+  );
+
+  const toggleSpecialist = (agentId: number) => {
+    const idStr = String(agentId);
+    setEspecialistas(prev =>
+      prev.includes(idStr) ? prev.filter(s => s !== idStr) : [...prev, idStr]
+    );
+  };
 
   // Load existing agent
   useEffect(() => {
@@ -255,6 +274,9 @@ export const AgentEditor: React.FC = () => {
         setSystem(agent.system || '');
         setTipo(agent.tipo || 'specialist');
         setTemperatura(agent.temperatura ?? 0.7);
+        setEspecialistas(
+          agent.especialistas ? agent.especialistas.split(',').map(s => s.trim()).filter(Boolean) : []
+        );
       } else {
         setError('Agente nao encontrado');
       }
@@ -277,6 +299,7 @@ export const AgentEditor: React.FC = () => {
       system,
       tipo,
       temperatura,
+      especialistas: tipo === 'orchestrator' ? especialistas.join(',') : '',
     };
 
     if (isNew) {
@@ -454,6 +477,69 @@ export const AgentEditor: React.FC = () => {
             {system.length} caracteres
           </p>
         </div>
+
+        {/* Especialistas (only for orchestrators) */}
+        {tipo === 'orchestrator' && (
+          <div className="border-t border-neutral-800 pt-6">
+            <label className="block text-sm font-medium mb-3">
+              <span className="flex items-center gap-1.5">
+                <Users size={14} />
+                Especialistas permitidos
+              </span>
+            </label>
+            <p className="text-xs text-neutral-500 mb-3">
+              Selecione quais especialistas este orquestrador pode coordenar
+            </p>
+            {availableSpecialists.length === 0 ? (
+              <div className="p-4 rounded border border-dashed border-neutral-800 text-center">
+                <p className="text-sm text-neutral-500 mb-2">Nenhum especialista disponivel</p>
+                <Link
+                  to="/agents/new"
+                  className="text-xs text-blue-400 hover:text-blue-300 underline"
+                >
+                  Criar um especialista primeiro
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {availableSpecialists.map(spec => {
+                  const isSelected = especialistas.includes(String(spec.id));
+                  return (
+                    <label
+                      key={spec.id}
+                      className={`flex items-center gap-3 p-3 rounded cursor-pointer transition-colors ${
+                        isSelected
+                          ? 'bg-blue-500/10 border border-blue-500/30'
+                          : 'bg-neutral-900 border border-neutral-800 hover:border-neutral-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSpecialist(spec.id!)}
+                        className="rounded accent-blue-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Bot size={14} className="text-blue-400 shrink-0" />
+                          <p className="text-sm font-medium text-white truncate">{spec.nome}</p>
+                        </div>
+                        <p className="text-[11px] text-neutral-500 font-mono truncate mt-0.5">
+                          {spec.modelo || 'Sem modelo'}
+                        </p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            {especialistas.length > 0 && (
+              <p className="text-[10px] text-neutral-600 mt-2">
+                {especialistas.length} especialista{especialistas.length > 1 ? 's' : ''} selecionado{especialistas.length > 1 ? 's' : ''}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex items-center justify-between pt-6 border-t border-neutral-800">
