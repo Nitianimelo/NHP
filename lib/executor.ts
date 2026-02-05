@@ -573,14 +573,34 @@ const executeStepWithRetry = async (
       // Resolve inputs with accumulated context
       step.input = resolveInputMapping(planStep.inputMapping, accCtx);
 
+      // Auto-chain: if no input from previous steps, include last step's output
+      const hasStepReference = Object.values(planStep.inputMapping).some(
+        v => typeof v === 'string' && v.startsWith('steps.')
+      );
+
+      if (!hasStepReference && accCtx.completedSteps.size > 0) {
+        // Get the last completed step's output
+        const lastStep = Array.from(accCtx.completedSteps.values()).pop();
+        if (lastStep?.output) {
+          step.input = {
+            ...step.input,
+            input_anterior: lastStep.output,
+            agente_anterior: lastStep.agentName,
+          };
+        }
+      }
+
       // Ensure there's always input for the specialist
-      // If no input was mapped, pass the user's goal and task description
       if (Object.keys(step.input).length === 0) {
         step.input = {
           tarefa: planStep.description || accCtx.userInput.goal,
           objetivo: accCtx.userInput.goal,
-          contexto: JSON.stringify(accCtx.userInput),
         };
+      }
+
+      // Always include the goal for context
+      if (!step.input.objetivo) {
+        step.input.objetivo = accCtx.userInput.goal;
       }
 
       console.log(`[Executor] Step ${step.id} input:`, step.input);
