@@ -195,3 +195,95 @@ export async function deleteAgentFromSupabase(id: number): Promise<boolean> {
   }
   return true;
 }
+
+// =====================================================
+// Knowledge RAG — table: knowledge_nhp
+// Columns: id (auto), titulo, conteudo, agente_id, tags, created_at
+// =====================================================
+
+export interface SupabaseKnowledge {
+  id?: number;
+  titulo: string;
+  conteudo: string;
+  agente_id?: number | null;
+  tags?: string;
+  created_at?: string;
+}
+
+/** List all knowledge entries */
+export async function listKnowledge(): Promise<SupabaseKnowledge[]> {
+  const { data, error } = await supabaseAdmin
+    .from('knowledge_nhp')
+    .select('*')
+    .order('id', { ascending: false });
+
+  if (error) {
+    console.error('[Supabase] listKnowledge error:', error.message);
+    return [];
+  }
+  return data || [];
+}
+
+/** Get knowledge for a specific agent */
+export async function getKnowledgeForAgent(agentId: number): Promise<SupabaseKnowledge[]> {
+  const { data, error } = await supabaseAdmin
+    .from('knowledge_nhp')
+    .select('*')
+    .or(`agente_id.eq.${agentId},agente_id.is.null`)
+    .order('id', { ascending: false });
+
+  if (error) {
+    console.error('[Supabase] getKnowledgeForAgent error:', error.message);
+    return [];
+  }
+  return data || [];
+}
+
+/** Search knowledge by text (simple search) */
+export async function searchKnowledge(query: string, agentId?: number): Promise<SupabaseKnowledge[]> {
+  let queryBuilder = supabaseAdmin
+    .from('knowledge_nhp')
+    .select('*')
+    .or(`titulo.ilike.%${query}%,conteudo.ilike.%${query}%,tags.ilike.%${query}%`);
+
+  if (agentId) {
+    queryBuilder = queryBuilder.or(`agente_id.eq.${agentId},agente_id.is.null`);
+  }
+
+  const { data, error } = await queryBuilder.limit(10);
+
+  if (error) {
+    console.error('[Supabase] searchKnowledge error:', error.message);
+    return [];
+  }
+  return data || [];
+}
+
+/** Create knowledge entry */
+export async function createKnowledge(knowledge: Omit<SupabaseKnowledge, 'id' | 'created_at'>): Promise<SupabaseKnowledge | null> {
+  const { data, error } = await supabaseAdmin
+    .from('knowledge_nhp')
+    .insert(knowledge)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[Supabase] createKnowledge error:', error.message);
+    return null;
+  }
+  return data;
+}
+
+/** Delete knowledge entry */
+export async function deleteKnowledge(id: number): Promise<boolean> {
+  const { error } = await supabaseAdmin
+    .from('knowledge_nhp')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('[Supabase] deleteKnowledge error:', error.message);
+    return false;
+  }
+  return true;
+}
